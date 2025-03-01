@@ -1,50 +1,41 @@
-# React + TypeScript + Vite
+# Stremio Web Player
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A web-based player for Stremio with React, TypeScript, and Vite.
 
-Currently, two official plugins are available:
+## Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This project uses:
+- React 18 with TypeScript
+- Vite for fast development and building
+- ESLint for code quality
+- Capacitor for mobile support
 
-## Expanding the ESLint configuration
+### Setup
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+1. Install dependencies:
+```bash
+npm install
 ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
-
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
-
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
+2. Run development server:
+```bash
+npm run dev
 ```
+
+3. Build for production:
+```bash
+npm run build
+```
+
+## Mobile Development
+
+The project includes an Android app implementation using Capacitor.
+
+To run the Android app:
+1. Build the web app
+2. Sync with Capacitor
+3. Open in Android Studio
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
