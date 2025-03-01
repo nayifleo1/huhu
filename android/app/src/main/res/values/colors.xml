@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#3F51B5</color>
+    <color name="colorPrimaryDark">#303F9F</color>
+    <color name="colorAccent">#FF4081</color>
+    <color name="player_control_background">#99000000</color>
+    <color name="player_progress_played">#E50914</color>
+    <color name="player_progress_buffered">#4DFFFFFF</color>
+    <color name="player_progress_unplayed">#4DFFFFFF</color>
+    <color name="player_overlay_scrim">#99000000</color>
+    <color name="player_preview_background">#CC000000</color>
+    <color name="player_chapter_background">#CC000000</color>
+    <color name="dialog_background">#2C2C2C</color>
+</resources>

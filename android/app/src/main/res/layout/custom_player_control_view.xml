@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- Back Button (Always on top) -->
+    <ImageButton
+        android:id="@+id/back_button"
+        android:layout_width="@dimen/player_icon_size"
+        android:layout_height="@dimen/player_icon_size"
+        android:layout_margin="@dimen/player_control_padding"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@drawable/ic_arrow_back"
+        android:tint="@android:color/white"
+        android:elevation="8dp"
+        android:translationZ="8dp"
+        android:stateListAnimator="@null"
+        android:clickable="true"
+        android:focusable="true"/>
+
+    <!-- Top Control Bar with Gradient -->
+    <LinearLayout
+        android:id="@+id/top_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="@drawable/gradient_top"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/player_control_padding"
+        android:paddingTop="32dp"
+        android:paddingBottom="@dimen/player_control_padding"
+        android:elevation="4dp">
+
+        <TextView
+            android:id="@+id/video_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/player_control_padding"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/player_title_text_size"
+            android:shadowColor="#80000000"
+            android:shadowDx="1"
+            android:shadowDy="1"
+            android:shadowRadius="2" />
+
+        <ImageButton
+            android:id="@+id/exo_quality"
+            android:layout_width="@dimen/player_icon_size"
+            android:layout_height="@dimen/player_icon_size"
+            android:layout_marginStart="@dimen/player_control_padding"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_hd"
+            android:tint="@android:color/white"
+            android:visibility="visible" />
+    </LinearLayout>
+
+    <!-- Center Play/Pause Button and Loading -->
+    <FrameLayout
+        android:id="@+id/center_controls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:elevation="4dp">
+
+        <ImageButton
+            android:id="@+id/exo_play_pause"
+            android:layout_width="@dimen/player_center_icon_size"
+            android:layout_height="@dimen/player_center_icon_size"
+            android:background="@drawable/circle_ripple_background"
+            android:padding="@dimen/player_control_padding"
+            android:scaleType="fitCenter"
+            android:tint="@android:color/white" />
+    </FrameLayout>
+
+    <!-- Bottom Control Bar with Gradient -->
+    <LinearLayout
+        android:id="@+id/bottom_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/gradient_bottom"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/player_control_padding"
+        android:paddingTop="48dp"
+        android:paddingBottom="@dimen/player_control_padding"
+        android:elevation="4dp">
+
+        <!-- Timeline -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@id/exo_position"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:textColor="@android:color/white"
+                android:textSize="@dimen/player_text_size"
+                android:shadowColor="#80000000"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="1" />
+
+            <com.google.android.exoplayer2.ui.DefaultTimeBar
+                android:id="@id/exo_progress"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/player_timeline_height"
+                android:layout_marginHorizontal="8dp"
+                android:layout_weight="1"
+                app:buffered_color="@color/player_progress_buffered"
+                app:played_color="@color/player_progress_played"
+                app:scrubber_color="@color/player_progress_played"
+                app:unplayed_color="@color/player_progress_unplayed" />
+
+            <TextView
+                android:id="@id/exo_duration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:textColor="@android:color/white"
+                android:textSize="@dimen/player_text_size"
+                android:shadowColor="#80000000"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="1" />
+        </LinearLayout>
+
+        <!-- Bottom Controls Row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageButton
+                    android:id="@+id/exo_subtitle"
+                    android:layout_width="@dimen/player_icon_size"
+                    android:layout_height="@dimen/player_icon_size"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_subtitles"
+                    android:tint="@android:color/white"
+                    android:visibility="gone" />
+
+                <ImageButton
+                    android:id="@+id/exo_audio"
+                    android:layout_width="@dimen/player_icon_size"
+                    android:layout_height="@dimen/player_icon_size"
+                    android:layout_marginStart="@dimen/player_control_padding"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_audio_track"
+                    android:tint="@android:color/white"
+                    android:visibility="gone" />
+
+                <ImageButton
+                    android:id="@+id/exo_speed"
+                    android:layout_width="@dimen/player_icon_size"
+                    android:layout_height="@dimen/player_icon_size"
+                    android:layout_marginStart="@dimen/player_control_padding"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_speed"
+                    android:tint="@android:color/white" />
+
+                <ImageButton
+                    android:id="@+id/exo_aspect"
+                    android:layout_width="@dimen/player_icon_size"
+                    android:layout_height="@dimen/player_icon_size"
+                    android:layout_marginStart="@dimen/player_control_padding"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@drawable/ic_aspect_ratio"
+                    android:tint="@android:color/white" />
+
+                <TextView
+                    android:id="@+id/next_episode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/player_control_padding"
+                    android:background="@drawable/rounded_background"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="6dp"
+                    android:text="Next Episode"
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/exo_fullscreen"
+                android:layout_width="@dimen/player_icon_size"
+                android:layout_height="@dimen/player_icon_size"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_fullscreen"
+                android:tint="@android:color/white" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Preview Thumbnail -->
+    <FrameLayout
+        android:id="@+id/preview_frame"
+        android:layout_width="160dp"
+        android:layout_height="90dp"
+        android:layout_gravity="center|bottom"
+        android:layout_marginBottom="120dp"
+        android:background="@drawable/rounded_background"
+        android:visibility="gone"
+        android:elevation="6dp">
+
+        <ImageView
+            android:id="@+id/preview_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop" />
+
+        <TextView
+            android:id="@+id/preview_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="4dp"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:shadowColor="#80000000"
+            android:shadowDx="1"
+            android:shadowDy="1"
+            android:shadowRadius="1" />
+    </FrameLayout>
+
+    <!-- Chapter Marker -->
+    <TextView
+        android:id="@+id/chapter_marker"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="@dimen/player_control_padding"
+        android:layout_marginTop="80dp"
+        android:background="@drawable/rounded_background"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:visibility="gone"
+        android:elevation="4dp" />
+</merge>

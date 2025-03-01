@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Stremio</string>
+    <string name="title_activity_main">Stremio Player</string>
+    <string name="package_name">com.stremio.player</string>
+    <string name="custom_url_scheme">com.stremio.player</string>
+    <string name="select_subtitle_track">Select Subtitle Track</string>
+</resources>

@@ -1,0 +1,13 @@
+{
+  "appId": "com.stremio.player",
+  "appName": "Stremio Web Player",
+  "webDir": "dist",
+  "plugins": {
+    "ExternalPlayer": {
+      "name": "ExternalPlayer"
+    }
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+} 
