@@ -263,10 +263,14 @@ const MobileContentRow = React.memo(({
                     px: 2,
                     WebkitOverflowScrolling: 'touch',
                     '&::-webkit-scrollbar': { 
-                        display: 'none'
+                        display: 'none',
+                        width: 0,
+                        height: 0,
+                        background: 'transparent'
                     },
                     scrollbarWidth: 'none',
                     msOverflowStyle: 'none',
+                    '-ms-overflow-style': 'none',
                     '& > *': {
                         scrollSnapAlign: 'start',
                         flexShrink: 0,
@@ -892,6 +896,14 @@ export default function CatalogMobile() {
                         bottom: 0,
                         overflowY: 'auto',
                         overflowX: 'hidden',
+                        '&::-webkit-scrollbar': { 
+                            display: 'none',
+                            width: 0,
+                            background: 'transparent'
+                        },
+                        scrollbarWidth: 'none',
+                        msOverflowStyle: 'none',
+                        '-ms-overflow-style': 'none'
                     }}
                 >
                     {/* Hero skeleton */}
@@ -1000,13 +1012,14 @@ export default function CatalogMobile() {
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    transition: 'none',
-                    willChange: 'transform',
-                    '&::-webkit-scrollbar': {
-                        display: 'none'
+                    '&::-webkit-scrollbar': { 
+                        display: 'none',
+                        width: 0,
+                        background: 'transparent'
                     },
-                    msOverflowStyle: 'none',
                     scrollbarWidth: 'none',
+                    msOverflowStyle: 'none',
+                    '-ms-overflow-style': 'none'
                 }}
             >
                 {/* Refresh indicator */}

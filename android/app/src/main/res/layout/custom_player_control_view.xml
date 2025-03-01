@@ -2,21 +2,6 @@
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <!-- Back Button (Always on top) -->
-    <ImageButton
-        android:id="@+id/back_button"
-        android:layout_width="@dimen/player_icon_size"
-        android:layout_height="@dimen/player_icon_size"
-        android:layout_margin="@dimen/player_control_padding"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:src="@drawable/ic_arrow_back"
-        android:tint="@android:color/white"
-        android:elevation="8dp"
-        android:translationZ="8dp"
-        android:stateListAnimator="@null"
-        android:clickable="true"
-        android:focusable="true"/>
-
     <!-- Top Control Bar with Gradient -->
     <LinearLayout
         android:id="@+id/top_controls"
@@ -30,6 +15,16 @@
         android:paddingBottom="@dimen/player_control_padding"
         android:elevation="4dp">
 
+        <ImageButton
+            android:id="@+id/back_button"
+            android:layout_width="@dimen/player_icon_size"
+            android:layout_height="@dimen/player_icon_size"
+            android:background="@drawable/modern_button_background"
+            android:src="@drawable/ic_arrow_back"
+            android:tint="@color/player_control_icon_normal"
+            android:clickable="true"
+            android:focusable="true"/>
+
         <TextView
             android:id="@+id/video_title"
             android:layout_width="0dp"
@@ -40,6 +35,7 @@
             android:maxLines="2"
             android:textColor="@android:color/white"
             android:textSize="@dimen/player_title_text_size"
+            android:fontFamily="sans-serif-medium"
             android:shadowColor="#80000000"
             android:shadowDx="1"
             android:shadowDy="1"
@@ -50,9 +46,9 @@
             android:layout_width="@dimen/player_icon_size"
             android:layout_height="@dimen/player_icon_size"
             android:layout_marginStart="@dimen/player_control_padding"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/modern_button_background"
             android:src="@drawable/ic_hd"
-            android:tint="@android:color/white"
+            android:tint="@color/player_control_icon_normal"
             android:visibility="visible" />
     </LinearLayout>
 
@@ -68,10 +64,10 @@
             android:id="@+id/exo_play_pause"
             android:layout_width="@dimen/player_center_icon_size"
             android:layout_height="@dimen/player_center_icon_size"
-            android:background="@drawable/circle_ripple_background"
+            android:background="@drawable/modern_center_button_background"
             android:padding="@dimen/player_control_padding"
             android:scaleType="fitCenter"
-            android:tint="@android:color/white" />
+            android:tint="@color/player_control_icon_normal" />
     </FrameLayout>
 
     <!-- Bottom Control Bar with Gradient -->
@@ -101,6 +97,7 @@
                 android:includeFontPadding="false"
                 android:textColor="@android:color/white"
                 android:textSize="@dimen/player_text_size"
+                android:fontFamily="sans-serif-medium"
                 android:shadowColor="#80000000"
                 android:shadowDx="1"
                 android:shadowDy="1"
@@ -114,7 +111,8 @@
                 android:layout_weight="1"
                 app:buffered_color="@color/player_progress_buffered"
                 app:played_color="@color/player_progress_played"
-                app:scrubber_color="@color/player_progress_played"
+                app:scrubber_color="@color/player_seekbar_thumb"
+                app:scrubber_drawable="@drawable/modern_seekbar_thumb"
                 app:unplayed_color="@color/player_progress_unplayed" />
 
             <TextView
@@ -124,6 +122,7 @@
                 android:includeFontPadding="false"
                 android:textColor="@android:color/white"
                 android:textSize="@dimen/player_text_size"
+                android:fontFamily="sans-serif-medium"
                 android:shadowColor="#80000000"
                 android:shadowDx="1"
                 android:shadowDy="1"
@@ -134,7 +133,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="@dimen/player_control_margin"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
@@ -149,49 +148,48 @@
                     android:id="@+id/exo_subtitle"
                     android:layout_width="@dimen/player_icon_size"
                     android:layout_height="@dimen/player_icon_size"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:background="@drawable/modern_button_background"
                     android:src="@drawable/ic_subtitles"
-                    android:tint="@android:color/white"
+                    android:tint="@color/player_control_icon_normal"
                     android:visibility="gone" />
 
                 <ImageButton
                     android:id="@+id/exo_audio"
                     android:layout_width="@dimen/player_icon_size"
                     android:layout_height="@dimen/player_icon_size"
-                    android:layout_marginStart="@dimen/player_control_padding"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:layout_marginStart="@dimen/player_control_margin"
+                    android:background="@drawable/modern_button_background"
                     android:src="@drawable/ic_audio_track"
-                    android:tint="@android:color/white"
+                    android:tint="@color/player_control_icon_normal"
                     android:visibility="gone" />
 
                 <ImageButton
                     android:id="@+id/exo_speed"
                     android:layout_width="@dimen/player_icon_size"
                     android:layout_height="@dimen/player_icon_size"
-                    android:layout_marginStart="@dimen/player_control_padding"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:layout_marginStart="@dimen/player_control_margin"
+                    android:background="@drawable/modern_button_background"
                     android:src="@drawable/ic_speed"
-                    android:tint="@android:color/white" />
+                    android:tint="@color/player_control_icon_normal" />
 
                 <ImageButton
                     android:id="@+id/exo_aspect"
                     android:layout_width="@dimen/player_icon_size"
                     android:layout_height="@dimen/player_icon_size"
-                    android:layout_marginStart="@dimen/player_control_padding"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:layout_marginStart="@dimen/player_control_margin"
+                    android:background="@drawable/modern_button_background"
                     android:src="@drawable/ic_aspect_ratio"
-                    android:tint="@android:color/white" />
+                    android:tint="@color/player_control_icon_normal" />
 
                 <TextView
                     android:id="@+id/next_episode"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/player_control_padding"
+                    android:layout_marginStart="@dimen/player_control_margin"
                     android:background="@drawable/rounded_background"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="6dp"
                     android:text="Next Episode"
                     android:textColor="@android:color/white"
+                    android:fontFamily="sans-serif-medium"
                     android:textSize="14sp"
                     android:visibility="gone" />
             </LinearLayout>
@@ -200,9 +198,9 @@
                 android:id="@+id/exo_fullscreen"
                 android:layout_width="@dimen/player_icon_size"
                 android:layout_height="@dimen/player_icon_size"
-                android:background="?attr/selectableItemBackgroundBorderless"
+                android:background="@drawable/modern_button_background"
                 android:src="@drawable/ic_fullscreen"
-                android:tint="@android:color/white" />
+                android:tint="@color/player_control_icon_normal" />
         </LinearLayout>
     </LinearLayout>
 
@@ -230,6 +228,7 @@
             android:layout_gravity="bottom|center_horizontal"
             android:layout_marginBottom="4dp"
             android:textColor="@android:color/white"
+            android:fontFamily="sans-serif-medium"
             android:textSize="12sp"
             android:shadowColor="#80000000"
             android:shadowDx="1"
@@ -246,10 +245,20 @@
         android:layout_marginStart="@dimen/player_control_padding"
         android:layout_marginTop="80dp"
         android:background="@drawable/rounded_background"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="6dp"
         android:textColor="@android:color/white"
-        android:textSize="14sp"
-        android:visibility="gone"
-        android:elevation="4dp" />
+        android:fontFamily="sans-serif-medium"
+        android:textSize="@dimen/player_chapter_text_size"
+        android:visibility="gone" />
+        
+    <!-- Speed Indicator -->
+    <TextView
+        android:id="@+id/speed_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/rounded_background"
+        android:textColor="@android:color/white"
+        android:fontFamily="sans-serif-medium"
+        android:textSize="18sp"
+        android:visibility="gone" />
 </merge>

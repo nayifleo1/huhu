@@ -1,71 +1,199 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
     Box,
-    Container,
     Typography,
     Grid,
-    CircularProgress,
     alpha,
     Paper,
     InputBase,
     IconButton,
     useTheme,
-    Button
+    List,
+    ListItem,
+    ListItemText,
+    Fab,
+    Chip,
+    Tab,
+    Tabs,
+    Container,
+    Skeleton,
+    Snackbar,
+    Alert,
+    SwipeableDrawer
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import ClearIcon from '@mui/icons-material/Clear';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { catalogService } from '../services/catalogService';
 import { StreamingContent } from '../types/catalog';
 import { useDebounce } from '../hooks/useDebounce';
 
-const INITIAL_ITEMS_TO_SHOW = 4;
-
 const Search = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const query = searchParams.get('q') || '';
+    const initialType = searchParams.get('type') || 'all';
+    const initialSort = searchParams.get('sort') || 'relevance';
+    
     const navigate = useNavigate();
     const theme = useTheme();
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const searchCache = useRef<{ [key: string]: StreamingContent[] }>({});
+    const abortController = useRef<AbortController | null>(null);
+    
     const [loading, setLoading] = useState(false);
     const [results, setResults] = useState<StreamingContent[]>([]);
+    const [filteredResults, setFilteredResults] = useState<StreamingContent[]>([]);
     const [searchInput, setSearchInput] = useState(query);
-    const [showAllMovies, setShowAllMovies] = useState(false);
-    const [showAllSeries, setShowAllSeries] = useState(false);
-    const debouncedSearchInput = useDebounce(searchInput, 300);
+    const [contentType, setContentType] = useState<string>(initialType);
+    const [sortOrder, setSortOrder] = useState<string>(initialSort);
+    const [error, setError] = useState<string | null>(null);
+    const [tabValue, setTabValue] = useState(0);
+    const [showToTop, setShowToTop] = useState(false);
+    const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+    
+    const debouncedSearchInput = useDebounce(searchInput, 500);
 
+    // Handle scroll to show/hide "to top" button
     useEffect(() => {
-        if (debouncedSearchInput) {
+        const handleScroll = () => {
+            setShowToTop(window.scrollY > 300);
+        };
+        
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+    
+    // Focus search input on component mount
+    useEffect(() => {
+        if (searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, []);
+
+    // Search when input changes
+    useEffect(() => {
+        // Only search if input is at least 2 characters
+        if (debouncedSearchInput && debouncedSearchInput.length >= 2) {
             searchContent(debouncedSearchInput);
-            setSearchParams({ q: debouncedSearchInput });
+            updateUrlParams();
         } else {
             setResults([]);
+            setFilteredResults([]);
         }
     }, [debouncedSearchInput]);
+
+    // Apply filters and sorting when results, type or sort order changes
+    useEffect(() => {
+        if (results.length > 0) {
+            applyFiltersAndSort();
+        }
+    }, [results, contentType, sortOrder]);
+
+    const updateUrlParams = () => {
+        const params: Record<string, string> = {};
+        
+        if (debouncedSearchInput) params.q = debouncedSearchInput;
+        if (contentType !== 'all') params.type = contentType;
+        if (sortOrder !== 'relevance') params.sort = sortOrder;
+        
+        setSearchParams(params);
+    };
 
     const searchContent = async (searchQuery: string) => {
         if (!searchQuery) return;
         
+        // Cancel any ongoing search
+        if (abortController.current) {
+            abortController.current.abort();
+        }
+        abortController.current = new AbortController();
+        
+        // Check cache first
+        const cacheKey = `${searchQuery}-${contentType}`;
+        if (searchCache.current[cacheKey]) {
+            setResults(searchCache.current[cacheKey]);
+            return;
+        }
+        
         setLoading(true);
+        setError(null);
+        
         try {
-            const [movieResults, seriesResults] = await Promise.all([
-                catalogService.getCatalogContent('com.linvo.cinemeta', 'movie', 'top', { search: searchQuery }),
-                catalogService.getCatalogContent('com.linvo.cinemeta', 'series', 'top', { search: searchQuery })
-            ]);
+            // Only fetch the content type we need
+            let promises = [];
+            if (contentType === 'all' || contentType === 'movie') {
+                promises.push(catalogService.getCatalogContent('com.linvo.cinemeta', 'movie', 'top', { search: searchQuery }));
+            }
+            if (contentType === 'all' || contentType === 'series') {
+                promises.push(catalogService.getCatalogContent('com.linvo.cinemeta', 'series', 'top', { search: searchQuery }));
+            }
 
-            const allResults = [...movieResults, ...seriesResults].filter(Boolean);
+            const results = await Promise.all(promises);
+            const allResults = results.flat().filter(Boolean);
+            
+            // Remove duplicates
             const uniqueResults = allResults.filter((item, index, self) =>
                 index === self.findIndex((t) => (
                     t.id === item.id && t.type === item.type
                 ))
             );
 
+            // Cache the results
+            searchCache.current[cacheKey] = uniqueResults;
             setResults(uniqueResults);
-        } catch (error) {
-            console.error('Error searching content:', error);
-            setResults([]);
+        } catch (err: any) {
+            // Only show error if it's not an abort error
+            if (err.name !== 'AbortError') {
+                console.error('Error searching content:', err);
+                setResults([]);
+                setError('Failed to fetch search results. Please try again later.');
+            }
         } finally {
+            if (abortController.current) {
+                abortController.current = null;
+            }
             setLoading(false);
         }
+    };
+
+    const applyFiltersAndSort = () => {
+        let filtered = [...results];
+        
+        // Apply type filter
+        if (contentType !== 'all') {
+            filtered = filtered.filter(item => item.type === contentType);
+        }
+        
+        // Apply sorting
+        if (sortOrder === 'name-asc') {
+            filtered.sort((a, b) => a.name.localeCompare(b.name));
+        } else if (sortOrder === 'name-desc') {
+            filtered.sort((a, b) => b.name.localeCompare(a.name));
+        } else if (sortOrder === 'year-desc') {
+            filtered.sort((a, b) => {
+                const yearA = a.releaseInfo ? parseInt(a.releaseInfo, 10) : 0;
+                const yearB = b.releaseInfo ? parseInt(b.releaseInfo, 10) : 0;
+                return yearB - yearA;
+            });
+        } else if (sortOrder === 'year-asc') {
+            filtered.sort((a, b) => {
+                const yearA = a.releaseInfo ? parseInt(a.releaseInfo, 10) : 0;
+                const yearB = b.releaseInfo ? parseInt(b.releaseInfo, 10) : 0;
+                return yearA - yearB;
+            });
+        } else if (sortOrder === 'rating-desc') {
+            filtered.sort((a, b) => {
+                const ratingA = a.imdbRating ? parseFloat(a.imdbRating) : 0;
+                const ratingB = b.imdbRating ? parseFloat(b.imdbRating) : 0;
+                return ratingB - ratingA;
+            });
+        }
+        
+        setFilteredResults(filtered);
     };
 
     const handleContentClick = (item: StreamingContent) => {
@@ -84,348 +212,270 @@ const Search = () => {
         });
     };
 
+    const handleClearSearch = () => {
+        setSearchInput('');
+        setResults([]);
+        setFilteredResults([]);
+        setSearchParams({});
+        if (searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    };
+
+    const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+        setTabValue(newValue);
+        setContentType(newValue === 0 ? 'all' : newValue === 1 ? 'movie' : 'series');
+    };
+
+    const handleCloseError = () => {
+        setError(null);
+    };
+
+    const handleImageError = (event: React.SyntheticEvent<HTMLImageElement, Event>) => {
+        event.currentTarget.src = 'https://via.placeholder.com/300x450?text=No+Poster';
+    };
+
+    const scrollToTop = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const toggleFilterDrawer = (open: boolean) => () => {
+        setFilterDrawerOpen(open);
+    };
+
+    const handleSortSelect = (value: string) => {
+        setSortOrder(value);
+        setFilterDrawerOpen(false);
+    };
+
     const movies = results.filter(item => item.type === 'movie');
     const series = results.filter(item => item.type === 'series');
-    const moviesToShow = showAllMovies ? movies : movies.slice(0, INITIAL_ITEMS_TO_SHOW);
-    const seriesToShow = showAllSeries ? series : series.slice(0, INITIAL_ITEMS_TO_SHOW);
+    
+    const renderContentCards = (items: StreamingContent[]) => (
+        <Grid container spacing={1}>
+            {items.map((item) => (
+                <Grid item xs={4} key={item.id}>
+                    <Box
+                        onClick={() => handleContentClick(item)}
+                        sx={{
+                            position: 'relative',
+                            cursor: 'pointer',
+                            transition: 'transform 0.2s ease',
+                            borderRadius: 1,
+                            overflow: 'hidden',
+                            aspectRatio: '2/3',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                            mb: 1,
+                            '&:active': {
+                                transform: 'scale(0.97)',
+                            }
+                        }}
+                    >
+                        <Box
+                            component="img"
+                            src={item.poster}
+                            alt={item.name}
+                            onError={handleImageError}
+                            sx={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover'
+                            }}
+                        />
+                        <Box
+                            sx={{
+                                position: 'absolute',
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                p: 1,
+                                background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 70%, transparent 100%)',
+                            }}
+                        >
+                            <Typography
+                                sx={{ 
+                                    color: '#fff',
+                                    fontWeight: 500,
+                                    fontSize: '0.85rem',
+                                    lineHeight: 1.2,
+                                    mb: 0.5,
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                    display: '-webkit-box'
+                                }}
+                            >
+                                {item.name}
+                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                {item.releaseInfo && (
+                                    <Typography 
+                                        sx={{ 
+                                            color: alpha('#fff', 0.7),
+                                            fontSize: '0.7rem'
+                                        }}
+                                    >
+                                        {item.releaseInfo}
+                                    </Typography>
+                                )}
+                                {item.imdbRating && (
+                                    <Chip 
+                                        label={`★ ${item.imdbRating}`} 
+                                        size="small" 
+                                        sx={{ 
+                                            height: 16, 
+                                            fontSize: '0.6rem',
+                                            ml: 'auto',
+                                            backgroundColor: theme.palette.warning.dark,
+                                            color: 'white'
+                                        }}
+                                    />
+                                )}
+                            </Box>
+                        </Box>
+                    </Box>
+                </Grid>
+            ))}
+        </Grid>
+    );
+    
+    const renderSkeletons = () => (
+        <Grid container spacing={1}>
+            {Array.from(new Array(12)).map((_, index) => (
+                <Grid item xs={4} key={index}>
+                    <Skeleton 
+                        variant="rectangular" 
+                        animation="wave"
+                        sx={{ 
+                            width: '100%', 
+                            aspectRatio: '2/3',
+                            borderRadius: 1,
+                            mb: 1
+                        }} 
+                    />
+                </Grid>
+            ))}
+        </Grid>
+    );
 
     return (
         <Box 
             sx={{ 
                 minHeight: '100vh',
-                background: 'linear-gradient(135deg, #000000 0%, #000000 100%)',
-                pt: { xs: 1, sm: 4 },
-                pb: { xs: 6, sm: 8 }
+                background: '#121212',
+                display: 'flex',
+                flexDirection: 'column'
             }}
         >
-            <Container maxWidth="xl">
-                {/* Search Bar */}
-                <Paper
-                    component="form"
-                    onSubmit={(e) => e.preventDefault()}
-                    sx={{
-                        p: '2px 4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        width: '100%',
-                        mb: { xs: 2, sm: 3 },
-                        borderRadius: { xs: 1.5, sm: 2 },
-                        background: alpha(theme.palette.background.paper, 0.4),
-                        backdropFilter: 'blur(10px)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                            background: alpha(theme.palette.background.paper, 0.6),
-                            border: '1px solid rgba(255,255,255,0.2)',
-                        }
-                    }}
-                >
-                    <InputBase
-                        sx={{ 
-                            ml: 2,
-                            flex: 1,
-                            color: 'white',
-                            fontSize: { xs: '1rem', sm: '1.1rem' }
+            {/* App Bar with Search */}
+            <Paper
+                elevation={1}
+                sx={{
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 10,
+                    borderRadius: 0,
+                    backgroundColor: alpha(theme.palette.background.paper, 0.95),
+                    backdropFilter: 'blur(10px)'
+                }}
+            >
+                <Box sx={{ p: 1 }}>
+                    <Paper
+                        component="form"
+                        onSubmit={(e) => e.preventDefault()}
+                        sx={{
+                            p: '2px 4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            width: '100%',
+                            borderRadius: 4,
+                            backgroundColor: alpha('#fff', 0.1),
                         }}
-                        placeholder="Search movies & TV shows..."
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        autoFocus
-                    />
-                    <IconButton 
-                        sx={{ 
-                            p: '10px',
-                            color: alpha('#fff', 0.7),
-                            mr: 1,
-                            '&:hover': {
-                                color: '#fff'
+                    >
+                        <IconButton sx={{ p: 1, color: alpha('#fff', 0.7) }}>
+                            <SearchIcon fontSize="small" />
+                        </IconButton>
+                        <InputBase
+                            inputRef={searchInputRef}
+                            sx={{ 
+                                ml: 1,
+                                flex: 1,
+                                color: 'white',
+                                fontSize: '0.95rem'
+                            }}
+                            placeholder="Search by title or actor name (typo-friendly)..."
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            inputProps={{ 'aria-label': 'search movies and tv shows' }}
+                        />
+                        {searchInput && (
+                            <IconButton 
+                                aria-label="clear search"
+                                onClick={handleClearSearch}
+                                sx={{ p: 1, color: alpha('#fff', 0.7) }}
+                            >
+                                <ClearIcon fontSize="small" />
+                            </IconButton>
+                        )}
+                        <IconButton 
+                            onClick={toggleFilterDrawer(true)}
+                            sx={{ 
+                                p: 1, 
+                                ml: 0.5, 
+                                color: alpha('#fff', sortOrder !== 'relevance' ? 1 : 0.7) 
+                            }}
+                        >
+                            <FilterListIcon fontSize="small" />
+                        </IconButton>
+                    </Paper>
+                </Box>
+
+                {results.length > 0 && (
+                    <Tabs 
+                        value={tabValue} 
+                        onChange={handleTabChange}
+                        variant="fullWidth"
+                        sx={{
+                            minHeight: 40,
+                            '& .MuiTab-root': {
+                                minHeight: 40,
+                                fontSize: '0.85rem',
+                                py: 0
                             }
                         }}
                     >
-                        <SearchIcon />
-                    </IconButton>
-                </Paper>
+                        <Tab label={`All (${results.length})`} />
+                        <Tab label={`Movies (${movies.length})`} />
+                        <Tab label={`TV Shows (${series.length})`} />
+                    </Tabs>
+                )}
+            </Paper>
 
-                {/* Results Title */}
-                <Typography 
-                    variant="h4" 
-                    sx={{ 
-                        mb: { xs: 0.5, sm: 1 },
-                        color: '#fff',
-                        fontWeight: 700,
-                        fontSize: { xs: '1.25rem', sm: '2rem' }
-                    }}
-                >
-                    Search Results
-                </Typography>
-                <Typography 
-                    sx={{ 
-                        mb: { xs: 2, sm: 4 },
-                        color: alpha('#fff', 0.7),
-                        fontSize: { xs: '0.85rem', sm: '1.1rem' }
-                    }}
-                >
-                    {debouncedSearchInput ? `Showing results for "${debouncedSearchInput}"` : 'Enter a search term to find movies and TV shows'}
-                </Typography>
+            {/* Main Content */}
+            <Container disableGutters maxWidth={false} sx={{ flex: 1, px: 1.5, pb: 2 }}>
+                {/* Status Text */}
+                {debouncedSearchInput && (
+                    <Typography 
+                        sx={{ 
+                            py: 1.5,
+                            color: alpha('#fff', 0.7),
+                            fontSize: '0.85rem'
+                        }}
+                    >
+                        {loading 
+                            ? `Searching for "${debouncedSearchInput}"...` 
+                            : filteredResults.length > 0 
+                              ? `Found ${filteredResults.length} results for "${debouncedSearchInput}"`
+                              : `No results for "${debouncedSearchInput}"`
+                        }
+                    </Typography>
+                )}
 
                 {/* Loading State */}
                 {loading ? (
-                    <Box 
-                        sx={{ 
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            minHeight: '50vh'
-                        }}
-                    >
-                        <CircularProgress />
-                    </Box>
-                ) : results.length > 0 ? (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {/* Movies Section */}
-                        {movies.length > 0 && (
-                            <Box>
-                                <Box sx={{ 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'space-between',
-                                    mb: 3
-                                }}>
-                                    <Typography 
-                                        variant="h5" 
-                                        sx={{ 
-                                            color: '#fff',
-                                            fontWeight: 600,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 1,
-                                            fontSize: { xs: '1.1rem', sm: '1.5rem' }
-                                        }}
-                                    >
-                                        Movies
-                                        <Typography 
-                                            component="span" 
-                                            sx={{ 
-                                                color: alpha('#fff', 0.5),
-                                                fontSize: { xs: '0.9rem', sm: '1rem' },
-                                                fontWeight: 400
-                                            }}
-                                        >
-                                            ({movies.length})
-                                        </Typography>
-                                    </Typography>
-                                    {movies.length > INITIAL_ITEMS_TO_SHOW && (
-                                        <Button
-                                            onClick={() => setShowAllMovies(!showAllMovies)}
-                                            endIcon={<KeyboardArrowRightIcon />}
-                                            sx={{
-                                                color: theme.palette.primary.main,
-                                                '&:hover': {
-                                                    background: alpha(theme.palette.primary.main, 0.1)
-                                                }
-                                            }}
-                                        >
-                                            {showAllMovies ? 'Show Less' : 'See All'}
-                                        </Button>
-                                    )}
-                                </Box>
-                                <Grid container spacing={1}>
-                                    {moviesToShow.map((item) => (
-                                        <Grid item xs={4} sm={4} md={3} lg={2} key={item.id}>
-                                            <Box
-                                                onClick={() => handleContentClick(item)}
-                                                sx={{
-                                                    position: 'relative',
-                                                    cursor: 'pointer',
-                                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                    borderRadius: 2,
-                                                    overflow: 'hidden',
-                                                    aspectRatio: '2/3',
-                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                                                    '&:hover': {
-                                                        transform: 'scale(1.03)',
-                                                        boxShadow: '0 6px 16px rgba(0,0,0,0.4)',
-                                                        '& .content-overlay': {
-                                                            opacity: 1
-                                                        }
-                                                    }
-                                                }}
-                                            >
-                                                <Box
-                                                    component="img"
-                                                    src={item.poster}
-                                                    alt={item.name}
-                                                    sx={{
-                                                        width: '100%',
-                                                        height: '100%',
-                                                        objectFit: 'cover'
-                                                    }}
-                                                />
-                                                <Box
-                                                    className="content-overlay"
-                                                    sx={{
-                                                        position: 'absolute',
-                                                        bottom: 0,
-                                                        left: 0,
-                                                        right: 0,
-                                                        p: 2,
-                                                        background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
-                                                        opacity: 0,
-                                                        transition: 'opacity 0.3s ease'
-                                                    }}
-                                                >
-                                                    <Typography
-                                                        sx={{ 
-                                                            color: '#fff',
-                                                            fontWeight: 600,
-                                                            fontSize: { xs: '0.8rem', sm: '1.1rem' },
-                                                            mb: 0.5
-                                                        }}
-                                                    >
-                                                        {item.name}
-                                                    </Typography>
-                                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                                        {item.releaseInfo && (
-                                                            <Typography 
-                                                                sx={{ 
-                                                                    color: alpha('#fff', 0.7),
-                                                                    fontSize: { xs: '0.8rem', sm: '0.9rem' }
-                                                                }}
-                                                            >
-                                                                {item.releaseInfo}
-                                                            </Typography>
-                                                        )}
-                                                    </Box>
-                                                </Box>
-                                            </Box>
-                                        </Grid>
-                                    ))}
-                                </Grid>
-                            </Box>
-                        )}
-
-                        {/* TV Shows Section */}
-                        {series.length > 0 && (
-                            <Box>
-                                <Box sx={{ 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'space-between',
-                                    mb: 3
-                                }}>
-                                    <Typography 
-                                        variant="h5" 
-                                        sx={{ 
-                                            color: '#fff',
-                                            fontWeight: 600,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 1,
-                                            fontSize: { xs: '1.1rem', sm: '1.5rem' }
-                                        }}
-                                    >
-                                        TV Shows
-                                        <Typography 
-                                            component="span" 
-                                            sx={{ 
-                                                color: alpha('#fff', 0.5),
-                                                fontSize: { xs: '0.9rem', sm: '1rem' },
-                                                fontWeight: 400
-                                            }}
-                                        >
-                                            ({series.length})
-                                        </Typography>
-                                    </Typography>
-                                    {series.length > INITIAL_ITEMS_TO_SHOW && (
-                                        <Button
-                                            onClick={() => setShowAllSeries(!showAllSeries)}
-                                            endIcon={<KeyboardArrowRightIcon />}
-                                            sx={{
-                                                color: theme.palette.primary.main,
-                                                '&:hover': {
-                                                    background: alpha(theme.palette.primary.main, 0.1)
-                                                }
-                                            }}
-                                        >
-                                            {showAllSeries ? 'Show Less' : 'See All'}
-                                        </Button>
-                                    )}
-                                </Box>
-                                <Grid container spacing={1}>
-                                    {seriesToShow.map((item) => (
-                                        <Grid item xs={4} sm={4} md={3} lg={2} key={item.id}>
-                                            <Box
-                                                onClick={() => handleContentClick(item)}
-                                                sx={{
-                                                    position: 'relative',
-                                                    cursor: 'pointer',
-                                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                    borderRadius: 2,
-                                                    overflow: 'hidden',
-                                                    aspectRatio: '2/3',
-                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                                                    '&:hover': {
-                                                        transform: 'scale(1.03)',
-                                                        boxShadow: '0 6px 16px rgba(0,0,0,0.4)',
-                                                        '& .content-overlay': {
-                                                            opacity: 1
-                                                        }
-                                                    }
-                                                }}
-                                            >
-                                                <Box
-                                                    component="img"
-                                                    src={item.poster}
-                                                    alt={item.name}
-                                                    sx={{
-                                                        width: '100%',
-                                                        height: '100%',
-                                                        objectFit: 'cover'
-                                                    }}
-                                                />
-                                                <Box
-                                                    className="content-overlay"
-                                                    sx={{
-                                                        position: 'absolute',
-                                                        bottom: 0,
-                                                        left: 0,
-                                                        right: 0,
-                                                        p: 2,
-                                                        background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
-                                                        opacity: 0,
-                                                        transition: 'opacity 0.3s ease'
-                                                    }}
-                                                >
-                                                    <Typography
-                                                        sx={{ 
-                                                            color: '#fff',
-                                                            fontWeight: 600,
-                                                            fontSize: { xs: '0.8rem', sm: '1.1rem' },
-                                                            mb: 0.5
-                                                        }}
-                                                    >
-                                                        {item.name}
-                                                    </Typography>
-                                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                                        {item.releaseInfo && (
-                                                            <Typography 
-                                                                sx={{ 
-                                                                    color: alpha('#fff', 0.7),
-                                                                    fontSize: { xs: '0.8rem', sm: '0.9rem' }
-                                                                }}
-                                                            >
-                                                                {item.releaseInfo}
-                                                            </Typography>
-                                                        )}
-                                                    </Box>
-                                                </Box>
-                                            </Box>
-                                        </Grid>
-                                    ))}
-                                </Grid>
-                            </Box>
-                        )}
-                    </Box>
+                    renderSkeletons()
+                ) : filteredResults.length > 0 ? (
+                    renderContentCards(filteredResults)
                 ) : debouncedSearchInput ? (
                     <Box 
                         sx={{ 
@@ -434,26 +484,157 @@ const Search = () => {
                         }}
                     >
                         <Typography 
-                            variant="h6" 
+                            variant="body1" 
                             sx={{ 
                                 color: alpha('#fff', 0.7),
                                 mb: 1,
-                                fontSize: { xs: '1.1rem', sm: '1.25rem' }
+                                fontSize: '1rem'
                             }}
                         >
                             No results found
                         </Typography>
                         <Typography 
+                            variant="body2"
                             sx={{ 
                                 color: alpha('#fff', 0.5),
-                                fontSize: { xs: '0.9rem', sm: '1rem' }
+                                fontSize: '0.85rem'
                             }}
                         >
                             Try different keywords or check your spelling
                         </Typography>
                     </Box>
-                ) : null}
+                ) : (
+                    <Box 
+                        sx={{ 
+                            textAlign: 'center',
+                            py: 8,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '60vh'
+                        }}
+                    >
+                        <SearchIcon sx={{ fontSize: 48, color: alpha('#fff', 0.2), mb: 2 }} />
+                        <Typography 
+                            variant="body1" 
+                            sx={{ 
+                                color: alpha('#fff', 0.7),
+                                mb: 1,
+                                fontSize: '1rem'
+                            }}
+                        >
+                            Search for movies and TV shows
+                        </Typography>
+                        <Typography 
+                            variant="body2"
+                            sx={{ 
+                                color: alpha('#fff', 0.5),
+                                fontSize: '0.85rem'
+                            }}
+                        >
+                            Enter a title, actor or genre to get started
+                        </Typography>
+                    </Box>
+                )}
             </Container>
+
+            {/* Filter Bottom Sheet */}
+            <SwipeableDrawer
+                anchor="bottom"
+                open={filterDrawerOpen}
+                onClose={toggleFilterDrawer(false)}
+                onOpen={toggleFilterDrawer(true)}
+                disableSwipeToOpen
+                sx={{
+                    '& .MuiDrawer-paper': {
+                        borderTopLeftRadius: 16,
+                        borderTopRightRadius: 16,
+                        maxHeight: '75vh'
+                    }
+                }}
+            >
+                <Box sx={{ p: 2 }}>
+                    <Typography 
+                        variant="subtitle1" 
+                        sx={{ 
+                            fontWeight: 500, 
+                            textAlign: 'center',
+                            pb: 1,
+                            borderBottom: '1px solid',
+                            borderColor: alpha('#000', 0.1)
+                        }}
+                    >
+                        Sort Results
+                    </Typography>
+                </Box>
+                <List sx={{ pt: 0 }}>
+                    {[
+                        { value: 'relevance', label: 'Relevance' },
+                        { value: 'name-asc', label: 'Name (A-Z)' },
+                        { value: 'name-desc', label: 'Name (Z-A)' },
+                        { value: 'year-desc', label: 'Year (Newest)' },
+                        { value: 'year-asc', label: 'Year (Oldest)' },
+                        { value: 'rating-desc', label: 'Rating (High-Low)' }
+                    ].map((option) => (
+                        <ListItem 
+                            key={option.value} 
+                            onClick={() => handleSortSelect(option.value)}
+                            sx={{ 
+                                py: 1.5,
+                                cursor: 'pointer',
+                                '&:hover': {
+                                    backgroundColor: alpha('#000', 0.04)
+                                }
+                            }}
+                        >
+                            <ListItemText primary={option.label} />
+                            {sortOrder === option.value ? (
+                                <CheckCircleIcon color="primary" />
+                            ) : (
+                                <RadioButtonUncheckedIcon sx={{ color: alpha('#000', 0.3) }} />
+                            )}
+                        </ListItem>
+                    ))}
+                </List>
+            </SwipeableDrawer>
+
+            {/* Scroll to Top FAB */}
+            {showToTop && (
+                <Fab
+                    size="small"
+                    color="primary"
+                    aria-label="scroll back to top"
+                    onClick={scrollToTop}
+                    sx={{
+                        position: 'fixed',
+                        bottom: 16,
+                        right: 16,
+                        opacity: 0.9
+                    }}
+                >
+                    <KeyboardArrowUpIcon />
+                </Fab>
+            )}
+
+            {/* Error Snackbar */}
+            <Snackbar
+                open={!!error}
+                autoHideDuration={4000}
+                onClose={handleCloseError}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <Alert 
+                    onClose={handleCloseError} 
+                    severity="error" 
+                    sx={{ 
+                        width: '100%',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                    }}
+                >
+                    {error}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 };

@@ -79,7 +79,12 @@ const Navbar = () => {
                             borderBottom: '1px solid rgba(20, 184, 166, 0.1)'
                         }}
                     >
-                        <Toolbar sx={{ justifyContent: 'center' }}>
+                        <Toolbar sx={{ 
+                            justifyContent: 'center',
+                            minHeight: '72px',
+                            paddingTop: '16px',
+                            paddingBottom: '8px'
+                        }}>
                             <Typography 
                                 variant="h4" 
                                 sx={{ 
@@ -98,7 +103,7 @@ const Navbar = () => {
                         </Toolbar>
                     </AppBar>
                 </HideOnScroll>
-                <Toolbar /> {/* Spacer for fixed AppBar */}
+                <Box sx={{ height: '88px' }} />
             </>
         );
     }

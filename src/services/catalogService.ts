@@ -5,6 +5,45 @@ const CINEMETA_URL = 'https://v3-cinemeta.strem.io';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_ACCESS_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI0MzljNDc4YTc3MWYzNWMwNTAyMmY5ZmVhYmNjYTAxYyIsIm5iZiI6MTcwOTkxMTEzNS4xNCwic3ViIjoiNjVlYjJjNWYzODlkYTEwMTYyZDgyOWU0Iiwic2NvcGVzIjpbImFwaV9yZWFkIl0sInZlcnNpb24iOjF9.gosBVl1wYUbePOeB9WieHn8bY9x938-GSGmlXZK_UVM';
 
+// Add fuzzy search utility
+function fuzzyMatch(str: string, pattern: string): boolean {
+    const strLower = str.toLowerCase();
+    const patternLower = pattern.toLowerCase();
+    
+    // Direct match check
+    if (strLower.includes(patternLower)) return true;
+    
+    // Levenshtein distance for fuzzy matching
+    const calculateLevenshteinDistance = (a: string, b: string): number => {
+        if (a.length === 0) return b.length;
+        if (b.length === 0) return a.length;
+
+        const matrix = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(null));
+
+        for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+        for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+
+        for (let i = 1; i <= a.length; i++) {
+            for (let j = 1; j <= b.length; j++) {
+                const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j - 1] + cost
+                );
+            }
+        }
+
+        return matrix[a.length][b.length];
+    };
+
+    // Calculate similarity threshold based on pattern length
+    const maxDistance = Math.floor(patternLower.length * 0.3); // Allow 30% error rate
+    const distance = calculateLevenshteinDistance(strLower, patternLower);
+    
+    return distance <= maxDistance;
+}
+
 export const catalogService = {
     async getCatalogContent(addonId: string, type: string, catalogId: string, options?: { search?: string }): Promise<StreamingContent[]> {
         try {
@@ -38,10 +77,20 @@ export const catalogService = {
                     .filter((item: any) => {
                         if (!options?.search) return true;
                         
-                        // For search results, filter to ensure items are actually relevant
                         const searchLower = options.search.toLowerCase();
+                        
+                        // Check title match with fuzzy search
                         const titleLower = (item.name || item.title || '').toLowerCase();
-                        return titleLower.includes(searchLower);
+                        if (fuzzyMatch(titleLower, searchLower)) return true;
+                        
+                        // Check cast match
+                        if (item.cast && Array.isArray(item.cast)) {
+                            return item.cast.some((actor: string) => 
+                                fuzzyMatch(actor.toLowerCase(), searchLower)
+                            );
+                        }
+                        
+                        return false;
                     })
                     .map((item: any) => ({
                         id: item.imdb_id || item.id,

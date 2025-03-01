@@ -1,14 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#3F51B5</color>
-    <color name="colorPrimaryDark">#303F9F</color>
-    <color name="colorAccent">#FF4081</color>
-    <color name="player_control_background">#99000000</color>
-    <color name="player_progress_played">#E50914</color>
-    <color name="player_progress_buffered">#4DFFFFFF</color>
-    <color name="player_progress_unplayed">#4DFFFFFF</color>
+    <color name="colorPrimary">#2196F3</color>
+    <color name="colorPrimaryDark">#1976D2</color>
+    <color name="colorAccent">#00BCD4</color>
+    <color name="player_control_background">#80000000</color>
+    <color name="player_progress_played">#00BCD4</color>
+    <color name="player_progress_buffered">#4D00BCD4</color>
+    <color name="player_progress_unplayed">#33FFFFFF</color>
     <color name="player_overlay_scrim">#99000000</color>
     <color name="player_preview_background">#CC000000</color>
     <color name="player_chapter_background">#CC000000</color>
-    <color name="dialog_background">#2C2C2C</color>
+    <color name="dialog_background">#212121</color>
+    <color name="player_control_icon_active">#00BCD4</color>
+    <color name="player_control_icon_normal">#FFFFFF</color>
+    <color name="player_button_background">#40FFFFFF</color>
+    <color name="player_seekbar_thumb">#00BCD4</color>
 </resources>

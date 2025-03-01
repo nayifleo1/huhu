@@ -3,14 +3,15 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/player_overlay_scrim"
-    android:clickable="false"
-    android:focusable="false">
+    android:background="#80000000"
+    android:clickable="true"
+    android:focusable="true">
 
     <ProgressBar
-        android:layout_width="56dp"
-        android:layout_height="56dp"
+        android:id="@+id/progress_bar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_gravity="center"
-        android:indeterminateTint="@color/colorAccent"/>
+        android:indeterminateTint="@color/player_control_icon_active"/>
 
 </FrameLayout>

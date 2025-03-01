@@ -50,15 +50,16 @@ interface GroupedStreams {
     };
 }
 
+interface Episode {
+    number: number;
+    title?: string;
+    description?: string;
+    thumbnail?: string;
+}
+
 interface SeasonData {
     season: number;
-    episodes: {
-        number: number;
-        title?: string;
-        description?: string;
-        released?: string;
-        thumbnail?: string;
-    }[];
+    episodes: Episode[];
 }
 
 interface CastMember {
@@ -246,10 +247,18 @@ const MobileMetadataDialog = () => {
                     const firstSeason = data.videos[0];
                     const seasonDetails = await catalogService.getSeasonDetails(id, firstSeason.season);
                     if (seasonDetails) {
-                        setSeasons([seasonDetails]);
-                        setSelectedSeason(seasonDetails.season);
-                        if (seasonDetails.episodes?.length > 0) {
-                            setSelectedEpisode(seasonDetails.episodes[0].number);
+                        // Transform episode thumbnails to high quality
+                        const enhancedSeasonDetails = {
+                            ...seasonDetails,
+                            episodes: seasonDetails.episodes.map((episode: Episode) => ({
+                                ...episode,
+                                thumbnail: episode.thumbnail?.replace('/w300/', '/original/') // Request higher quality image
+                            }))
+                        };
+                        setSeasons([enhancedSeasonDetails]);
+                        setSelectedSeason(enhancedSeasonDetails.season);
+                        if (enhancedSeasonDetails.episodes?.length > 0) {
+                            setSelectedEpisode(enhancedSeasonDetails.episodes[0].number);
                         }
                     }
                 } catch (seasonError) {
@@ -275,10 +284,9 @@ const MobileMetadataDialog = () => {
         }
     };
 
-    // Add a new effect to load season details when selected season changes
+    // Modify the season loading effect to not override selected season if already set
     useEffect(() => {
         if (type === 'series' && metadata && metadata.videos && metadata.videos.length > 0) {
-            // Load all seasons initially
             const loadAllSeasons = async () => {
                 const seasonPromises = (metadata.videos as Video[]).map(video => 
                     catalogService.getSeasonDetails(id, video.season)
@@ -286,11 +294,19 @@ const MobileMetadataDialog = () => {
                 
                 try {
                     const seasonDetails = await Promise.all(seasonPromises);
-                    const validSeasons = seasonDetails.filter(season => season !== null);
+                    const validSeasons = seasonDetails
+                        .filter(season => season !== null)
+                        .map(season => ({
+                            ...season,
+                            episodes: season.episodes.map((episode: Episode) => ({
+                                ...episode,
+                                thumbnail: episode.thumbnail?.replace('/w300/', '/original/') // Request higher quality image
+                            }))
+                        }));
                     setSeasons(validSeasons);
                     
-                    // Set initial season and episode
-                    if (validSeasons.length > 0) {
+                    // Only set initial season and episode if not already set
+                    if (validSeasons.length > 0 && !selectedSeason) {
                         setSelectedSeason(validSeasons[0].season);
                         if (validSeasons[0].episodes?.length > 0) {
                             setSelectedEpisode(validSeasons[0].episodes[0].number);
@@ -303,7 +319,7 @@ const MobileMetadataDialog = () => {
             
             loadAllSeasons();
         }
-    }, [type, id, metadata]);
+    }, [type, id, metadata, selectedSeason]);
 
     const loadStreams = async (season?: number, episode?: number) => {
         setLoadingStreams(true);
@@ -719,7 +735,7 @@ const MobileMetadataDialog = () => {
                     )}
                     {audioInfo.map((format, index) => (
                         <Chip
-                            key={index}
+                            key={`audio-format-${format}-${index}`}
                             size="small"
                             icon={<SurroundSoundIcon sx={{ fontSize: '1rem' }} />}
                             label={format}
@@ -824,7 +840,7 @@ const MobileMetadataDialog = () => {
                                 backgroundImage: `url(${metadata.background || metadata.poster})`,
                                 backgroundSize: 'cover',
                                 backgroundPosition: 'center',
-                                filter: 'brightness(0.65)',
+                                filter: 'brightness(0.8)',
                                 transform: 'scale(1.1)',
                                 transition: 'transform 0.3s ease-out',
                                 '&::before': {
@@ -834,7 +850,7 @@ const MobileMetadataDialog = () => {
                                     left: 0,
                                     right: 0,
                                     bottom: 0,
-                                    background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.6) 40%, rgba(0, 0, 0, 0.9) 70%, rgba(0, 0, 0, 0.98) 85%, rgba(0, 0, 0, 1) 100%)'
+                                    background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.4) 40%, rgba(0, 0, 0, 0.8) 70%, rgba(0, 0, 0, 0.95) 85%, rgba(0, 0, 0, 1) 100%)'
                                 }
                             }}
                         />
@@ -999,19 +1015,19 @@ const MobileMetadataDialog = () => {
 
                 <Box sx={{ p: 2, pt: 1.5 }}>
                     <Box sx={{ mb: 2 }}>
-                        <Collapse in={!showFullDescription} collapsedSize={60}>
-                                <Typography
+                        <Collapse in={showFullDescription} collapsedSize={60}>
+                            <Typography
                                 variant="body2"
-                                    sx={{
-                                        color: alpha('#fff', 0.9),
+                                sx={{
+                                    color: alpha('#fff', 0.9),
                                     fontSize: '0.9rem',
                                     lineHeight: 1.5,
                                     mb: 1
-                                    }}
-                                >
-                                    {metadata.description}
-                                </Typography>
-                            </Collapse>
+                                }}
+                            >
+                                {metadata.description}
+                            </Typography>
+                        </Collapse>
                         {metadata.description && metadata.description.length > 150 && (
                             <Button
                                 onClick={() => setShowFullDescription(!showFullDescription)}
@@ -1030,11 +1046,11 @@ const MobileMetadataDialog = () => {
                             >
                                 {showFullDescription ? 'Show less' : 'Show more'}
                             </Button>
-                    )}
+                        )}
                     </Box>
 
                     {metadata.castData && metadata.castData.length > 0 && (
-                                <Box sx={{ mb: 2 }}>
+                                <Box sx={{ mb: 4 }}>
                                     <Typography
                                 variant="subtitle2"
                                         sx={{
@@ -1530,25 +1546,25 @@ const MobileMetadataDialog = () => {
                             alignItems: 'center',
                             minHeight: '200px'
                         }}>
-                        <Typography
+                            <Typography
                                 variant="body2"
-                            sx={{
+                                sx={{
                                     color: alpha('#fff', 0.7),
                                     textAlign: 'center'
                                 }}
                             >
                                 No streams available
-                        </Typography>
+                            </Typography>
                         </Box>
                     ) : (
                         Object.entries(groupedStreams)
                             .filter(([addonId]) => selectedSource === 'all' || addonId === selectedSource)
                             .map(([addonId, { addonName, streams }]) => (
                                 <Box key={addonId} sx={{ mb: 3, width: '100%' }}>
-                        <Typography
+                                    <Typography
                                         variant="subtitle2"
-                            sx={{
-                                color: alpha('#fff', 0.7),
+                                        sx={{
+                                            color: alpha('#fff', 0.7),
                                             fontSize: '0.8rem',
                                             fontWeight: 600,
                                             mb: 1.5,
@@ -1566,7 +1582,7 @@ const MobileMetadataDialog = () => {
                                             }}
                                         />
                                         {addonName}
-                        </Typography>
+                                    </Typography>
                                     <Box sx={{ 
                                         display: 'flex', 
                                         flexDirection: 'column', 
@@ -1574,10 +1590,10 @@ const MobileMetadataDialog = () => {
                                         width: '100%'
                                     }}>
                                         {streams.map((stream) => renderStreamCard(stream))}
-                    </Box>
+                                    </Box>
                                 </Box>
                             ))
-                )}
+                    )}
                 </Box>
             </Box>
         );
@@ -1701,18 +1717,17 @@ const MobileMetadataDialog = () => {
                         onClick={handleBack}
                         sx={{
                             position: 'fixed',
-                            top: 16,
+                            top: 32,
                             left: 16,
                             zIndex: 1200,
-                            bgcolor: alpha('#000', 0.5),
-                            backdropFilter: 'blur(10px)',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                            padding: '8px',
+                            color: '#fff',
                             '&:hover': {
-                                bgcolor: alpha('#000', 0.7)
+                                color: theme.palette.primary.main
                             }
                         }}
                     >
-                        <ArrowBackIcon />
+                        <ArrowBackIcon fontSize="large" />
                     </IconButton>
                 </Slide>
 

@@ -14,9 +14,32 @@
         app:controller_layout_id="@layout/custom_player_control_view"
         app:use_controller="true"
         app:hide_on_touch="false"
+        app:resize_mode="fit"
+        app:surface_type="surface_view"
+        app:shutter_background_color="@android:color/black"
+        app:show_buffering="never"
         android:clickable="false"
         android:focusable="false"
         android:fitsSystemWindows="false" />
+
+    <!-- Fixed Subtitle Container -->
+    <FrameLayout
+        android:id="@+id/fixed_subtitle_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="120dp">
+
+        <com.google.android.exoplayer2.ui.SubtitleView
+            android:id="@id/exo_subtitles"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:paddingLeft="32dp"
+            android:paddingRight="32dp" />
+
+    </FrameLayout>
 
     <include
         android:id="@+id/loading_overlay"
