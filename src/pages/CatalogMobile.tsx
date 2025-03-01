@@ -639,10 +639,11 @@ export default function CatalogMobile() {
             <Box 
                 sx={{ 
                     position: 'relative',
-                    height: '65vh',
+                    height: '60vh',
                     width: '100%',
                     overflow: 'hidden',
-                    mb: 3
+                    mb: 3,
+                    mt: 0
                 }}
             >
                 <Fade key={featuredContent.id} in timeout={1200}>
@@ -1012,6 +1013,7 @@ export default function CatalogMobile() {
                     left: 0,
                     right: 0,
                     bottom: 0,
+                    paddingTop: '72px',
                     paddingBottom: '56px',
                     '&::-webkit-scrollbar': { 
                         display: 'none',
