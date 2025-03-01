@@ -77,7 +77,7 @@ const MobileBottomNav = () => {
                 <Box
                     sx={{
                         height: 72,
-                        background: 'rgba(0, 0, 0, 0.85)',
+                        background: 'linear-gradient(180deg, #000000 0%, #050505 100%)',
                         backdropFilter: 'blur(20px)',
                         borderRadius: '16px',
                         display: 'flex',
@@ -145,7 +145,7 @@ const MobileBottomNav = () => {
                             <Typography
                                 variant="caption"
                                 sx={{
-                                    mt: 0.5,
+                                    mt: 0,
                                     fontSize: '0.7rem',
                                     fontWeight: item.value === value ? 600 : 400,
                                     color: item.value === value 
