@@ -13,6 +13,7 @@ import CatalogExpanded from './pages/CatalogExpanded';
 import Settings from './pages/Settings';
 import theme from './theme';
 import { ScrollHideProvider } from './contexts/ScrollHideContext';
+import EmbedPlayer from './components/EmbedPlayer';
 
 const globalStyles = {
   '*': {
@@ -46,6 +47,7 @@ const AppContent = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const hideBottomNav = location.pathname.includes('/title/');
+  const isEmbedPlayer = location.pathname.includes('/embed/');
 
   return (
     <ScrollHideProvider>
@@ -63,7 +65,7 @@ const AppContent = () => {
           flexDirection: 'column'
         }}
       >
-        {isMobile ? <MobileNavbar /> : <Navbar />}
+        {!isEmbedPlayer && (isMobile ? <MobileNavbar /> : <Navbar />)}
         <Box
           component="main"
           sx={{
@@ -79,6 +81,7 @@ const AppContent = () => {
           <Routes>
             <Route path="/" element={<CatalogWrapper />} />
             <Route path="/play/:type/:id" element={<Player />} />
+            <Route path="/embed/:type/:id" element={<EmbedPlayer />} />
             <Route path="/addons" element={<AddonsManager />} />
             <Route path="/title/:type/:id" element={<ResponsiveMetadataDialog />} />
             <Route path="/search" element={<Search />} />
@@ -86,7 +89,7 @@ const AppContent = () => {
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </Box>
-        {isMobile && !hideBottomNav && <MobileBottomNav />}
+        {isMobile && !hideBottomNav && !isEmbedPlayer && <MobileBottomNav />}
       </Box>
     </ScrollHideProvider>
   );
