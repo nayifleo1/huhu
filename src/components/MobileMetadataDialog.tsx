@@ -353,9 +353,9 @@ const MobileMetadataDialog = () => {
                 // Sort groups to show non-torrent sources first
                 const sortedGrouped = Object.entries(grouped)
                     .sort(([a], [b]) => {
-                        // Railway, VidSrc and VidSrcXYZ first, then others
-                        if (a === 'railway' || a === 'vidsrc' || a === 'vidsrcxyz') return -1;
-                        if (b === 'railway' || b === 'vidsrc' || b === 'vidsrcxyz') return 1;
+                        // Railway, VidSrc and VidSrcICU first, then others
+                        if (a === 'railway' || a === 'vidsrc' || a === 'vidsrcicu') return -1;
+                        if (b === 'railway' || b === 'vidsrc' || b === 'vidsrcicu') return 1;
                         return 0;
                     })
                     .reduce((acc, [key, value]) => {
@@ -478,7 +478,7 @@ const MobileMetadataDialog = () => {
                 }
             };
 
-            const fetchVidSrcXYZ = async () => {
+            const fetchVidSrcICU = async () => {
                 try {
                     // Create a direct embed URL with minimal parameters to avoid detection
                     const videoId = id;
@@ -492,34 +492,34 @@ const MobileMetadataDialog = () => {
                     if (type === 'series') {
                         if (season !== undefined && episode !== undefined) {
                             // For TV episodes with modified parameters
-                            embedUrl = `https://vidsrc.xyz/embed/tv/${videoId}/${season}-${episode}?t=${Date.now()}&token=${randomToken}&p=web`;
+                            embedUrl = `https://vidsrc.icu/embed/tv/${videoId}/${season}-${episode}?t=${Date.now()}&token=${randomToken}&p=web`;
                         } else {
                             // For TV series
-                            embedUrl = `https://vidsrc.xyz/embed/tv/${videoId}?t=${Date.now()}&token=${randomToken}&p=web`;
+                            embedUrl = `https://vidsrc.icu/embed/tv/${videoId}?t=${Date.now()}&token=${randomToken}&p=web`;
                         }
                     } else {
                         // For movies
-                        embedUrl = `https://vidsrc.xyz/embed/movie/${videoId}?t=${Date.now()}&token=${randomToken}&p=web`;
+                        embedUrl = `https://vidsrc.icu/embed/movie/${videoId}?t=${Date.now()}&token=${randomToken}&p=web`;
                     }
 
-                    console.log('Fetching from VidSrcXYZ:', embedUrl);
+                    console.log('Fetching from VidSrcICU:', embedUrl);
 
                     // Create multiple quality options
                     const qualities = ['1080p', '720p', '480p'];
                     const streams = qualities.map(quality => ({
-                        name: `VidSrcXYZ ${quality}`,
-                        title: `VidSrcXYZ Stream (${quality})`,
+                        name: `VidSrcICU ${quality}`,
+                        title: `VidSrcICU Stream (${quality})`,
                         url: embedUrl,
                         behaviorHints: {
                             notWebReady: false
                         },
-                        addonId: 'vidsrcxyz',
-                        addonName: 'VidSrcXYZ'
+                        addonId: 'vidsrcicu',
+                        addonName: 'VidSrcICU'
                     } as LocalStream));
 
                     updateStreams(streams);
                 } catch (error) {
-                    console.error('VidSrcXYZ API error:', error);
+                    console.error('VidSrcICU API error:', error);
                 }
             };
 
@@ -545,7 +545,7 @@ const MobileMetadataDialog = () => {
             // Start all fetches immediately without waiting
             fetchRailway();
             fetchVidSrc();
-            fetchVidSrcXYZ();
+            fetchVidSrcICU();
             fetchStremio();
 
             // Set loading to false after a reasonable timeout
@@ -567,9 +567,9 @@ const MobileMetadataDialog = () => {
         }
 
         try {
-            // Handle vidsrc.xyz embed URLs differently
-            if (stream.addonId === 'vidsrcxyz') {
-                // For vidsrc.xyz, we navigate to a special player route that can handle embeds
+            // Handle vidsrc.icu embed URLs differently
+            if (stream.addonId === 'vidsrcicu') {
+                // For vidsrc.icu, we navigate to a special player route that can handle embeds
                 navigate(`/embed/${type}/${id}?embedUrl=${encodeURIComponent(stream.url)}`);
                 return;
             }
