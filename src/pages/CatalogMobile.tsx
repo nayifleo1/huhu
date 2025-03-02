@@ -29,7 +29,7 @@ export const MobileContentCard = React.memo(({ item }: { item: StreamingContent 
             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             background: 'transparent',
             border: 'none',
-            borderRadius: 2,
+            borderRadius: 1.5,
             overflow: 'hidden',
             cursor: 'pointer',
             transform: 'scale(1)',
@@ -39,6 +39,9 @@ export const MobileContentCard = React.memo(({ item }: { item: StreamingContent 
                 '& .poster-image': {
                     transform: 'scale(1.05)',
                     filter: 'brightness(1.1)',
+                },
+                '& .content-overlay': {
+                    background: 'linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.98) 15%, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0.6) 60%, rgba(0, 0, 0, 0.4) 100%)',
                 }
             },
             '&:active': {
@@ -60,7 +63,7 @@ export const MobileContentCard = React.memo(({ item }: { item: StreamingContent 
                     height: '100%',
                     width: '100%',
                     objectFit: 'cover',
-                    borderRadius: 2,
+                    borderRadius: 1.5,
                     boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
                     transition: 'all 0.4s ease',
                 }}
@@ -106,22 +109,43 @@ const MobileContentRow = React.memo(({
     const { contentType, catalogId, type } = getContentInfo(title);
 
     const handleSeeMore = () => {
-        navigate(`/catalog/${type}/${catalogId}`, { 
-            state: { 
-                title: contentType,
-                items: items
-            } 
-        });
+        // Add fade-out animation to the current section
+        const currentSection = rowRef.current?.parentElement;
+        if (currentSection) {
+            // Apply fade-out effect
+            currentSection.style.transition = 'opacity 0.3s ease';
+            currentSection.style.opacity = '0';
+            
+            // Navigate after animation completes
+            setTimeout(() => {
+                navigate(`/catalog/${type}/${catalogId}`, { 
+                    state: { 
+                        title: contentType,
+                        items: items,
+                        fadeIn: true // Add flag to indicate fade-in should happen
+                    } 
+                });
+            }, 300);
+        } else {
+            // Fallback if animation can't be applied
+            navigate(`/catalog/${type}/${catalogId}`, { 
+                state: { 
+                    title: contentType,
+                    items: items,
+                    fadeIn: true
+                } 
+            });
+        }
     };
 
     return (
-        <Box sx={{ mb: 4 }}>
+        <Box sx={{ mb: 3 }}>
             <Box 
                 sx={{ 
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    mb: 2,
+                    mb: 1.5,
                     mx: 2,
                 }}
             >
@@ -184,7 +208,7 @@ const MobileContentRow = React.memo(({
                     overflowX: 'auto',
                     scrollSnapType: 'x mandatory',
                     scrollBehavior: 'smooth',
-                    gap: 2,
+                    gap: 1.5,
                     px: 2,
                     WebkitOverflowScrolling: 'touch',
                     '&::-webkit-scrollbar': { 
@@ -199,8 +223,8 @@ const MobileContentRow = React.memo(({
                     '& > *': {
                         scrollSnapAlign: 'start',
                         flexShrink: 0,
-                        width: 'calc((100% - 2rem) / 2.5)',
-                        maxWidth: 'calc((100% - 2rem) / 2.5)',
+                        width: 'calc((100% - 3rem) / 2.5)',
+                        maxWidth: 'calc((100% - 3rem) / 2.5)',
                     },
                     '&::after': {
                         content: '""',
@@ -557,6 +581,14 @@ export default function CatalogMobile() {
         }).filter(Boolean);
     }, [content, addons, handleContentClick]);
 
+    // Preload hero image when featuredContent changes
+    useEffect(() => {
+        if (featuredContent?.background || featuredContent?.poster) {
+            const img = new Image();
+            img.src = featuredContent.background || featuredContent.poster || '';
+        }
+    }, [featuredContent?.background, featuredContent?.poster]);
+
     const renderMobileHero = () => {
         if (!featuredContent) return null;
 
@@ -568,37 +600,31 @@ export default function CatalogMobile() {
                     width: '100%',
                     overflow: 'hidden',
                     mb: -1,
-                    mt: 0,
-                    backgroundColor: '#000'
+                    mt: 0
                 }}
             >
-                <Fade key={featuredContent.id} in timeout={800}>
-                    <Box
-                        sx={{
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundImage: `url(${featuredContent.background || featuredContent.poster})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        filter: 'brightness(0.9)',
+                        '&::before': {
+                            content: '""',
                             position: 'absolute',
                             top: 0,
                             left: 0,
                             right: 0,
                             bottom: 0,
-                            backgroundImage: `url(${featuredContent.background || featuredContent.poster})`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center',
-                            filter: 'brightness(0.9)',
-                            willChange: 'transform',
-                            opacity: 1,
-                            '&::before': {
-                                content: '""',
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                background: 'linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.98) 10%, rgba(0, 0, 0, 0.95) 20%, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0.7) 50%, rgba(0, 0, 0, 0.4) 75%, rgba(0, 0, 0, 0.3) 100%)',
-                                pointerEvents: 'none'
-                            }
-                        }}
-                    />
-                </Fade>
+                            background: 'linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.98) 10%, rgba(0, 0, 0, 0.95) 20%, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0.7) 50%, rgba(0, 0, 0, 0.4) 75%, rgba(0, 0, 0, 0.3) 100%)'
+                        }
+                    }}
+                />
 
                 <Container 
                     maxWidth="xl" 

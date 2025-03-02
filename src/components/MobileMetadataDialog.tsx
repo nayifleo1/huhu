@@ -841,7 +841,18 @@ const MobileMetadataDialog = () => {
         setCastPopupOpen(false);
     };
 
+    // Preload background image when metadata changes
+    useEffect(() => {
+        if (metadata?.background || metadata?.poster) {
+            const img = new Image();
+            img.src = metadata.background || metadata.poster || '';
+        }
+    }, [metadata?.background, metadata?.poster]);
+
     const renderInfo = () => {
+        const getHeroHeight = () => window.innerWidth > 768 ? '75vh' : '65vh';
+        const logoUrl = metadata?.logo || null;
+        
         if (loading) {
             return (
                 <Box sx={{ p: 2 }}>
@@ -855,23 +866,19 @@ const MobileMetadataDialog = () => {
 
         if (!metadata) return null;
 
-        const getHeroHeight = () => window.innerWidth > 768 ? '75vh' : '65vh';
-        const logoUrl = metadata.logo ? metadata.logo : (metadata.imdb_id ? `https://live.metahub.space/logo/medium/${metadata.imdb_id}/img` : null);
-
         return (
-            <Box sx={{ pb: 10 }}>
+            <Box sx={{ pb: 8 }}>
+                {/* Hero Section */}
                 <Box
                     sx={{
                         position: 'relative',
-                        width: '100%',
                         height: getHeroHeight(),
-                        overflow: 'hidden',
-                        backgroundColor: '#000',
+                        width: '100%',
+                        overflow: 'hidden'
                     }}
                 >
-                    {(metadata.background || metadata.poster) && (
+                    {(metadata?.background || metadata?.poster) ? (
                         <Box
-                            component="div"
                             sx={{
                                 position: 'absolute',
                                 top: 0,
@@ -883,7 +890,6 @@ const MobileMetadataDialog = () => {
                                 backgroundPosition: 'center',
                                 filter: 'brightness(0.8)',
                                 opacity: 1,
-                                willChange: 'transform',
                                 '&::before': {
                                     content: '""',
                                     position: 'absolute',
@@ -891,9 +897,19 @@ const MobileMetadataDialog = () => {
                                     left: 0,
                                     right: 0,
                                     bottom: 0,
-                                    background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.4) 40%, rgba(0, 0, 0, 0.8) 70%, rgba(0, 0, 0, 0.95) 85%, rgba(0, 0, 0, 1) 100%)',
-                                    pointerEvents: 'none'
+                                    background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.4) 40%, rgba(0, 0, 0, 0.8) 70%, rgba(0, 0, 0, 0.95) 85%, rgba(0, 0, 0, 1) 100%)'
                                 }
+                            }}
+                        />
+                    ) : (
+                        <Box
+                            sx={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)'
                             }}
                         />
                     )}
