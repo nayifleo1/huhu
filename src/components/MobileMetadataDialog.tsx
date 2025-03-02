@@ -726,11 +726,13 @@ const MobileMetadataDialog = () => {
                             fontFamily: stream.addonId === 'com.stremio.torrentio.addon' ? 'monospace' : 'inherit'
                         }}
                     >
-                        {stream.addonId === 'com.stremio.torrentio.addon' ? stream.name : (stream.title && stream.name ? `${stream.title} • ${stream.name}` : (stream.title || stream.name || 'Unnamed Stream'))}
+                        {stream.addonId === 'com.stremio.torrentio.addon' 
+                            ? `${stream.name} • ${stream.title}` 
+                            : (stream.title && stream.name ? `${stream.title} • ${stream.name}` : (stream.title || stream.name || 'Unnamed Stream'))}
                     </Typography>
                     
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
-                        {isRealDebridCached(stream) && (
+                        {isRealDebridCached(stream) && stream.addonId !== 'com.stremio.torrentio.addon' && (
                             <Box
                                 sx={{
                                     display: 'inline-flex',
