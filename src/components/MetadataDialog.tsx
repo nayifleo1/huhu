@@ -1181,20 +1181,6 @@ const MetadataDialog = () => {
     };
 
     const renderTabs = () => {
-        const itemTabStyles = {
-            fontSize: { xs: '0.9rem', sm: '1rem' },
-            minWidth: 'auto',
-            py: 1.5,
-            px: { xs: 2, sm: 3 },
-            fontWeight: 600,
-            textTransform: 'none',
-            color: 'text.secondary',
-            '&.Mui-selected': {
-                color: 'text.primary',
-                fontWeight: 700
-            }
-        };
-
         console.log('metadata.cast:', metadata.cast);
         const castList = Array.isArray(metadata.cast) ? metadata.cast.join(', ') : 'No cast available';
 

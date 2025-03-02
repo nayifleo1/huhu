@@ -11,8 +11,6 @@ import {
   TextField,
   Typography,
   List,
-  ListItem,
-  ListItemText,
   ListItemSecondaryAction,
   IconButton,
   CircularProgress,
@@ -32,7 +30,6 @@ import { alpha } from '@mui/material/styles';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import InfoIcon from '@mui/icons-material/Info';
 import PreviewIcon from '@mui/icons-material/Preview';
 import StremioService from '../services/stremioService';
 import { Manifest } from '../types/stremio';
@@ -84,7 +81,16 @@ const AddonsManager: React.FC = () => {
     setLoading(true);
     try {
       const installedAddons = stremioService.getInstalledAddons();
-      setAddons(installedAddons);
+      const validAddons = installedAddons.map(addon => ({
+        ...addon,
+        types: addon.types || [],
+        resources: addon.resources?.map(resource => ({
+          ...resource,
+          types: resource.types || []
+        })) || [],
+        catalogs: addon.catalogs || []
+      })) as Manifest[];
+      setAddons(validAddons);
     } catch (err) {
       console.error('Error loading addons:', err);
       setSnackbar({
@@ -432,7 +438,7 @@ const AddonsManager: React.FC = () => {
                   {addonPreview.resources.map((resource, index) => (
                     <Tooltip
                       key={index}
-                      title={`Supported types: ${resource.types.join(', ')}`}
+                      title={`Supported types: ${Array.isArray(resource.types) ? resource.types.join(', ') : 'None'}`}
                     >
                       <Chip
                         label={resource.name}

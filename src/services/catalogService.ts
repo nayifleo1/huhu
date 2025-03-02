@@ -4,6 +4,8 @@ import { StreamingAddon, StreamingContent } from '../types/catalog';
 const CINEMETA_URL = 'https://v3-cinemeta.strem.io';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_ACCESS_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI0MzljNDc4YTc3MWYzNWMwNTAyMmY5ZmVhYmNjYTAxYyIsIm5iZiI6MTcwOTkxMTEzNS4xNCwic3ViIjoiNjVlYjJjNWYzODlkYTEwMTYyZDgyOWU0Iiwic2NvcGVzIjpbImFwaV9yZWFkIl0sInZlcnNpb24iOjF9.gosBVl1wYUbePOeB9WieHn8bY9x938-GSGmlXZK_UVM';
+const TMDB_TIMEOUT = 3000; // 3 seconds timeout
+const TMDB_MAX_RETRIES = 2;
 
 // Add fuzzy search utility
 function fuzzyMatch(str: string, pattern: string): boolean {
@@ -42,6 +44,33 @@ function fuzzyMatch(str: string, pattern: string): boolean {
     const distance = calculateLevenshteinDistance(strLower, patternLower);
     
     return distance <= maxDistance;
+}
+
+// Add interface for cast member at the top of the file
+interface CastMember {
+    id: number;
+    name: string;
+    character: string;
+    profilePath: string | null;
+    order: number;
+}
+
+// Add this utility function for retrying requests
+async function retryRequest(requestFn: () => Promise<any>, maxRetries: number = TMDB_MAX_RETRIES): Promise<any> {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            return await requestFn();
+        } catch (error: any) {
+            if (attempt === maxRetries - 1) throw error;
+            
+            // If it's a timeout or network error, wait before retrying
+            if (error.code === 'ECONNABORTED' || error.message.includes('timeout') || error.message.includes('Network Error')) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+                continue;
+            }
+            throw error;
+        }
+    }
 }
 
 export const catalogService = {
@@ -227,248 +256,201 @@ export const catalogService = {
 
     async getMetadata(type: string, id: string) {
         try {
-            const isMovie = type === 'movie';
+            // Format the ID to ensure it's a valid IMDB ID
+            const imdbId = id.startsWith('tt') ? id : `tt${id}`;
             
-            // If the ID starts with 'tt', it's an IMDB ID and needs to be converted
-            let tmdbId = id;
-            if (id.startsWith('tt')) {
-                const findResponse = await axios.get(
-                    `${TMDB_BASE_URL}/find/${id}?external_source=imdb_id`,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${TMDB_ACCESS_TOKEN}`,
-                            'accept': 'application/json'
+            // Fetch data from Cinemeta
+            const cinemetaResponse = await axios.get(`${CINEMETA_URL}/meta/${type}/${imdbId}.json`);
+            
+            if (!cinemetaResponse.data?.meta) {
+                throw new Error('No metadata returned from Cinemeta');
+            }
+
+            const data = cinemetaResponse.data.meta;
+
+            // Get TMDB ID from IMDB ID with timeout and retry
+            let tmdbId;
+            try {
+                const findResponse = await retryRequest(async () => {
+                    return await axios.get(
+                        `${TMDB_BASE_URL}/find/${imdbId}?external_source=imdb_id`,
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${TMDB_ACCESS_TOKEN}`
+                            },
+                            timeout: TMDB_TIMEOUT
                         }
-                    }
-                );
-
-                // Get the TMDB ID from the appropriate results array
-                const result = isMovie ? 
-                    findResponse.data.movie_results[0] : 
-                    findResponse.data.tv_results[0];
-
-                if (!result) {
-                    throw new Error(`No TMDB results found for IMDB ID: ${id}`);
-                }
-
-                tmdbId = result.id.toString();
-            }
-
-            const endpoint = `${TMDB_BASE_URL}/${isMovie ? 'movie' : 'tv'}/${tmdbId}`;
-            
-            // For TV shows, we need to get all seasons data
-            const requests = [
-                axios.get(endpoint, {
-                    headers: {
-                        'Authorization': `Bearer ${TMDB_ACCESS_TOKEN}`,
-                        'accept': 'application/json'
-                    }
-                }),
-                axios.get(`${endpoint}/credits`, {
-                    headers: {
-                        'Authorization': `Bearer ${TMDB_ACCESS_TOKEN}`,
-                        'accept': 'application/json'
-                    }
-                })
-            ];
-
-            if (!isMovie) {
-                // For TV shows, get aggregate credits for a more complete cast list
-                requests.push(
-                    axios.get(`${endpoint}/aggregate_credits`, {
-                        headers: {
-                            'Authorization': `Bearer ${TMDB_ACCESS_TOKEN}`,
-                            'accept': 'application/json'
-                        }
-                    })
-                );
-            }
-
-            const responses = await Promise.all(requests);
-            const [details, credits, aggregateCredits] = responses;
-            const data = details.data;
-            
-            // Process cast data, preferring aggregate credits for TV shows
-            let castData;
-            if (!isMovie && aggregateCredits?.data?.cast) {
-                castData = aggregateCredits.data.cast
-                    .filter((member: any) => member.profile_path)
-                    .sort((a: any, b: any) => (b.roles?.length || 0) - (a.roles?.length || 0))
-                    .slice(0, 20)
-                    .map((member: any) => ({
-                        id: member.id,
-                        name: member.name,
-                        character: member.roles?.[0]?.character || '',
-                        profilePath: `https://image.tmdb.org/t/p/w185${member.profile_path}`,
-                        order: member.order
-                    }));
-            } else {
-                castData = credits.data.cast
-                    .filter((member: any) => member.profile_path)
-                    .slice(0, 20)
-                    .map((member: any) => ({
-                        id: member.id,
-                        name: member.name,
-                        character: member.character,
-                        profilePath: `https://image.tmdb.org/t/p/w185${member.profile_path}`,
-                        order: member.order
-                    }));
-            }
-
-            // Get director (for movies) or creators (for TV shows)
-            let director;
-            if (isMovie) {
-                director = credits.data.crew.find((member: any) => member.job === 'Director')?.name;
-            } else {
-                const creators = data.created_by?.map((creator: any) => creator.name) || [];
-                director = creators.length > 0 ? creators.join(', ') : undefined;
-            }
-
-            // Handle seasons for TV shows
-            let videos = [];
-            if (!isMovie && data.seasons) {
-                // Get the list of valid seasons (filtering out season 0 and unaired seasons)
-                const validSeasons = data.seasons
-                    .filter((season: any) => 
-                        season.season_number > 0 && 
-                        season.episode_count > 0 &&
-                        new Date(season.air_date) <= new Date() // Only include seasons that have started airing
-                    )
-                    .sort((a: any, b: any) => a.season_number - b.season_number);
-
-                // Map the seasons to our format
-                videos = validSeasons.map((season: any) => ({
-                    season: season.season_number,
-                    episode: 1,
-                    title: season.name,
-                    overview: season.overview,
-                    thumbnail: season.poster_path ? `https://image.tmdb.org/t/p/w300${season.poster_path}` : null,
-                    episodeCount: season.episode_count,
-                    airDate: season.air_date
-                }));
-
-                // Log season data for debugging
-                console.log('Series seasons data:', {
-                    title: data.name,
-                    totalSeasons: data.number_of_seasons,
-                    seasonsFound: videos.length,
-                    seasonNumbers: videos.map((v: any) => v.season)
+                    );
                 });
+                tmdbId = findResponse.data.movie_results?.[0]?.id || findResponse.data.tv_results?.[0]?.id;
+            } catch (error) {
+                console.error('Error fetching TMDB ID (using Cinemeta fallback):', error);
+            }
+
+            // Fetch cast data from TMDB if we have the ID
+            let castData = [];
+            if (tmdbId) {
+                try {
+                    const creditsResponse = await retryRequest(async () => {
+                        return await axios.get(
+                            `${TMDB_BASE_URL}/${type === 'movie' ? 'movie' : 'tv'}/${tmdbId}/credits`,
+                            {
+                                headers: {
+                                    'Authorization': `Bearer ${TMDB_ACCESS_TOKEN}`
+                                },
+                                timeout: TMDB_TIMEOUT
+                            }
+                        );
+                    });
+
+                    if (creditsResponse.data.cast?.length > 0) {
+                        castData = creditsResponse.data.cast.map((member: any) => ({
+                            id: member.id,
+                            name: member.name,
+                            character: member.character || '',
+                            profilePath: member.profile_path 
+                                ? `https://image.tmdb.org/t/p/w185${member.profile_path}`
+                                : null,
+                            order: member.order
+                        }));
+                    }
+                } catch (error) {
+                    console.error('Error fetching TMDB cast data (using Cinemeta fallback):', error);
+                }
+            }
+
+            // If TMDB cast data fetch failed or is empty, use Cinemeta cast data
+            if (castData.length === 0) {
+                console.log('Using Cinemeta cast data as fallback');
+                castData = (data.cast || []).map((actor: string, index: number) => ({
+                    id: index + 1,
+                    name: actor,
+                    character: '',
+                    profilePath: data.cast_imdb_ids?.[index] 
+                        ? `https://images.metahub.space/avatar/medium/${data.cast_imdb_ids[index]}/img` 
+                        : null,
+                    order: index
+                }));
+            }
+            
+            // Map videos for TV shows
+            let videos = [];
+            if (type === 'series' && data.videos) {
+                // Group videos by season and get the first episode of each season
+                const seasonMap = new Map();
+                data.videos.forEach((video: any) => {
+                    if (video.season && video.episode) {
+                        if (!seasonMap.has(video.season)) {
+                            seasonMap.set(video.season, {
+                                season: video.season,
+                                episode: 1,
+                                title: video.name || video.title || `Season ${video.season}`,
+                                overview: video.overview || '',
+                                thumbnail: video.thumbnail || data.background,
+                                episodeCount: 0,
+                                airDate: video.released,
+                                episodes: [] // Add array to store episode details
+                            });
+                        }
+                        // Update episode count and store episode details
+                        const seasonData = seasonMap.get(video.season);
+                        seasonData.episodeCount++;
+                        seasonData.episodes = seasonData.episodes || [];
+                        seasonData.episodes.push({
+                            number: video.episode,
+                            title: video.name || video.title || `Episode ${video.episode}`,
+                            overview: video.overview || '',
+                            thumbnail: video.thumbnail || data.background,
+                            released: video.released,
+                            runtime: video.runtime
+                        });
+                        seasonMap.set(video.season, seasonData);
+                    }
+                });
+                
+                videos = Array.from(seasonMap.values()).sort((a: any, b: any) => a.season - b.season);
             }
 
             const metadata = {
-                id: data.id.toString(),
-                imdb_id: id.startsWith('tt') ? id : data.external_ids?.imdb_id,
+                id: data.id,
+                imdb_id: data.imdb_id || imdbId,
                 type,
-                name: data.title || data.name,
-                poster: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null,
-                background: data.backdrop_path ? `https://image.tmdb.org/t/p/original${data.backdrop_path}` : null,
-                logo: null,
-                description: data.overview,
-                releaseInfo: isMovie ? 
-                    new Date(data.release_date).getFullYear() : 
-                    `${new Date(data.first_air_date).getFullYear()}${data.status === 'Ended' ? '-' + new Date(data.last_air_date).getFullYear() : ''}`,
-                runtime: data.runtime ? 
-                    `${data.runtime}m` : 
-                    data.episode_run_time?.[0] ? `${data.episode_run_time[0]}m` : undefined,
-                genres: data.genres.map((g: any) => g.name),
-                cast: castData.map((c: { name: string }) => c.name).join(', '),
+                name: data.name,
+                poster: data.poster,
+                background: data.background,
+                logo: data.logo,
+                description: data.description,
+                releaseInfo: data.releaseInfo,
+                runtime: data.runtime,
+                genres: data.genres || [],
+                cast: castData.map((c: CastMember) => c.name).join(', ') || '',
                 castData,
-                director,
-                rating: (data.vote_average / 2).toFixed(1),
+                director: data.director,
+                rating: data.imdbRating ? (parseFloat(data.imdbRating) / 2).toFixed(1) : undefined,
                 videos,
-                numberOfSeasons: videos.length, // Use actual number of valid seasons
-                inProduction: data.in_production,
-                status: data.status,
-                lastAirDate: data.last_air_date,
-                nextAirDate: data.next_episode_to_air?.air_date
+                numberOfSeasons: videos.length,
+                inProduction: data.status === 'Continuing',
+                status: data.status || 'Released',
+                lastAirDate: data.videos?.slice(-1)[0]?.released || null,
+                nextAirDate: null
             };
 
             return metadata;
         } catch (error) {
-            console.error('Error fetching TMDB metadata:', error);
+            console.error('Error fetching metadata:', error);
             return null;
         }
     },
 
     async getSeasonDetails(showId: string, seasonNumber: number) {
         try {
-            // Convert IMDB ID to TMDB ID if necessary
-            let tmdbId = showId;
-            if (showId.startsWith('tt')) {
-                const findResponse = await axios.get(
-                    `${TMDB_BASE_URL}/find/${showId}?external_source=imdb_id`,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${TMDB_ACCESS_TOKEN}`,
-                            'accept': 'application/json'
-                        }
-                    }
-                );
+            // Format the ID to ensure it's a valid IMDB ID
+            const imdbId = showId.startsWith('tt') ? showId : `tt${showId}`;
+            const url = `${CINEMETA_URL}/meta/series/${imdbId}.json`;
 
-                const result = findResponse.data.tv_results[0];
-                if (!result) {
-                    throw new Error(`No TMDB results found for IMDB ID: ${showId}`);
-                }
-
-                tmdbId = result.id.toString();
+            console.log('Fetching season details from Cinemeta:', url);
+            const response = await axios.get(url);
+            
+            if (!response.data?.meta) {
+                throw new Error('No metadata returned from Cinemeta');
             }
 
-            // Get both season details and show details to validate season number
-            const [seasonResponse, showResponse] = await Promise.all([
-                axios.get(
-                    `${TMDB_BASE_URL}/tv/${tmdbId}/season/${seasonNumber}`,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${TMDB_ACCESS_TOKEN}`,
-                            'accept': 'application/json'
-                        }
-                    }
-                ),
-                axios.get(
-                    `${TMDB_BASE_URL}/tv/${tmdbId}`,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${TMDB_ACCESS_TOKEN}`,
-                            'accept': 'application/json'
-                        }
-                    }
+            const data = response.data.meta;
+            
+            // Filter videos for the requested season and ensure they have all required data
+            const seasonEpisodes = (data.videos || [])
+                .filter((video: any) => 
+                    video.season === seasonNumber &&
+                    video.episode &&
+                    video.released // Only include episodes with release dates
                 )
-            ]);
-
-            const seasonData = seasonResponse.data;
-            const showData = showResponse.data;
-
-            // Validate that this is a valid season
-            if (seasonNumber <= 0 || seasonNumber > showData.number_of_seasons) {
-                throw new Error(`Invalid season number: ${seasonNumber}`);
-            }
-
-            // Sort episodes by episode number and filter out any invalid episodes
-            const episodes = seasonData.episodes
-                .filter((episode: any) => 
-                    episode.episode_number > 0 && 
-                    episode.air_date // Only include episodes with air dates
-                )
-                .sort((a: any, b: any) => a.episode_number - b.episode_number)
+                .sort((a: any, b: any) => a.episode - b.episode)
                 .map((episode: any) => ({
-                    number: episode.episode_number,
-                    title: episode.name,
-                    description: episode.overview,
-                    released: episode.air_date,
-                    thumbnail: episode.still_path ? `https://image.tmdb.org/t/p/w300${episode.still_path}` : null,
-                    runtime: episode.runtime
+                    number: episode.episode,
+                    title: episode.name || episode.title || `Episode ${episode.episode}`,
+                    description: episode.overview || episode.description || '',
+                    released: episode.released,
+                    thumbnail: episode.thumbnail || data.background,
+                    runtime: episode.runtime || data.runtime,
+                    imdbId: episode.imdb_id || null // Include episode-specific IMDB ID if available
                 }));
+
+            if (seasonEpisodes.length === 0) {
+                throw new Error(`No episodes found for season ${seasonNumber}`);
+            }
+
+            // Get season-specific metadata if available
+            const seasonMeta = data.seasons?.find((s: any) => s.season === seasonNumber);
 
             return {
                 season: seasonNumber,
-                episodes,
-                name: seasonData.name,
-                overview: seasonData.overview,
-                poster: seasonData.poster_path ? `https://image.tmdb.org/t/p/w300${seasonData.poster_path}` : null
+                episodes: seasonEpisodes,
+                name: seasonMeta?.name || `Season ${seasonNumber}`,
+                overview: seasonMeta?.overview || data.description || '',
+                poster: seasonMeta?.poster || data.poster
             };
         } catch (error) {
-            console.error('Error fetching season details:', error);
+            console.error('Error fetching season details from Cinemeta:', error);
             return null;
         }
     }

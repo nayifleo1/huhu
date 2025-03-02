@@ -29,7 +29,7 @@ export const MobileContentCard = React.memo(({ item }: { item: StreamingContent 
             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             background: 'transparent',
             border: 'none',
-            borderRadius: 1.5,
+            borderRadius: 2,
             overflow: 'hidden',
             cursor: 'pointer',
             transform: 'scale(1)',
@@ -39,9 +39,6 @@ export const MobileContentCard = React.memo(({ item }: { item: StreamingContent 
                 '& .poster-image': {
                     transform: 'scale(1.05)',
                     filter: 'brightness(1.1)',
-                },
-                '& .content-overlay': {
-                    background: 'linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.98) 15%, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0.6) 60%, rgba(0, 0, 0, 0.4) 100%)',
                 }
             },
             '&:active': {
@@ -63,83 +60,11 @@ export const MobileContentCard = React.memo(({ item }: { item: StreamingContent 
                     height: '100%',
                     width: '100%',
                     objectFit: 'cover',
-                    borderRadius: 1.5,
+                    borderRadius: 2,
                     boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
                     transition: 'all 0.4s ease',
                 }}
             />
-            <Box 
-                className="content-overlay"
-                sx={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    background: 'linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.5) 60%, rgba(0, 0, 0, 0) 100%)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'flex-end',
-                    p: 1,
-                    transition: 'all 0.3s ease',
-                    borderRadius: '0 0 12px 12px'
-                }}
-            >
-                <Typography 
-                    variant="subtitle2" 
-                    sx={{ 
-                        fontWeight: 600, 
-                        color: '#ffffff',
-                        fontSize: '0.8rem',
-                        lineHeight: 1.2,
-                        mb: 0.25,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 1,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        textShadow: '0 1px 2px rgba(0,0,0,0.4)'
-                    }}
-                >
-                    {item.name}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                    {item.releaseInfo && (
-                        <Typography 
-                            variant="caption" 
-                            sx={{ 
-                                color: alpha('#fff', 0.95), 
-                                fontWeight: 500,
-                                fontSize: '0.7rem',
-                                textShadow: '0 1px 2px rgba(0,0,0,0.4)'
-                            }}
-                        >
-                            {item.releaseInfo}
-                        </Typography>
-                    )}
-                    {item.imdbRating && (
-                        <Box sx={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: 0.25,
-                            backgroundColor: 'rgba(245, 197, 24, 0.2)',
-                            borderRadius: '4px',
-                            padding: '1px 4px'
-                        }}>
-                            <StarIcon sx={{ color: '#f5c518', fontSize: '0.7rem' }} />
-                            <Typography 
-                                variant="caption" 
-                                sx={{ 
-                                    color: '#f5c518', 
-                                    fontWeight: 600,
-                                    fontSize: '0.7rem',
-                                    lineHeight: 1
-                                }}
-                            >
-                                {item.imdbRating}
-                            </Typography>
-                        </Box>
-                    )}
-                </Box>
-            </Box>
         </Box>
     </Card>
 ));
@@ -190,13 +115,13 @@ const MobileContentRow = React.memo(({
     };
 
     return (
-        <Box sx={{ mb: 3 }}>
+        <Box sx={{ mb: 4 }}>
             <Box 
                 sx={{ 
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    mb: 1.5,
+                    mb: 2,
                     mx: 2,
                 }}
             >
@@ -259,7 +184,7 @@ const MobileContentRow = React.memo(({
                     overflowX: 'auto',
                     scrollSnapType: 'x mandatory',
                     scrollBehavior: 'smooth',
-                    gap: 1.5,
+                    gap: 2,
                     px: 2,
                     WebkitOverflowScrolling: 'touch',
                     '&::-webkit-scrollbar': { 
@@ -274,8 +199,8 @@ const MobileContentRow = React.memo(({
                     '& > *': {
                         scrollSnapAlign: 'start',
                         flexShrink: 0,
-                        width: 'calc((100% - 3rem) / 3)',
-                        maxWidth: 'calc((100% - 3rem) / 3)',
+                        width: 'calc((100% - 2rem) / 2.5)',
+                        maxWidth: 'calc((100% - 2rem) / 2.5)',
                     },
                     '&::after': {
                         content: '""',
@@ -639,14 +564,15 @@ export default function CatalogMobile() {
             <Box 
                 sx={{ 
                     position: 'relative',
-                    height: '60vh',
+                    height: '65vh',
                     width: '100%',
                     overflow: 'hidden',
-                    mb: 3,
-                    mt: 0
+                    mb: -1,
+                    mt: 0,
+                    backgroundColor: '#000'
                 }}
             >
-                <Fade key={featuredContent.id} in timeout={1200}>
+                <Fade key={featuredContent.id} in timeout={800}>
                     <Box
                         sx={{
                             position: 'absolute',
@@ -658,6 +584,8 @@ export default function CatalogMobile() {
                             backgroundSize: 'cover',
                             backgroundPosition: 'center',
                             filter: 'brightness(0.9)',
+                            willChange: 'transform',
+                            opacity: 1,
                             '&::before': {
                                 content: '""',
                                 position: 'absolute',
@@ -665,7 +593,8 @@ export default function CatalogMobile() {
                                 left: 0,
                                 right: 0,
                                 bottom: 0,
-                                background: 'linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.98) 15%, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0.6) 60%, rgba(0, 0, 0, 0.4) 100%)'
+                                background: 'linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.98) 10%, rgba(0, 0, 0, 0.95) 20%, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0.7) 50%, rgba(0, 0, 0, 0.4) 75%, rgba(0, 0, 0, 0.3) 100%)',
+                                pointerEvents: 'none'
                             }
                         }}
                     />
@@ -678,14 +607,22 @@ export default function CatalogMobile() {
                         position: 'relative',
                         display: 'flex',
                         alignItems: 'flex-end',
-                        pt: 4,
-                        pb: 5,
+                        justifyContent: 'flex-start',
+                        pt: 0,
+                        pb: 2,
                         zIndex: 2
                     }}
                 >
                     <Fade key={`content-${featuredContent.id}`} in timeout={1200}>
-                        <Box sx={{ width: '100%', px: 2.5 }}>
-                            <Box sx={{ mb: 2 }}>
+                        <Box sx={{ 
+                            width: '100%', 
+                            px: 2.5,
+                            pb: 2,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start'
+                        }}>
+                            <Box sx={{ mb: 1.5 }}>
                                 {featuredContent.genres && (
                                     <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                                         {featuredContent.genres.slice(0, 3).map((genre) => (
@@ -726,7 +663,7 @@ export default function CatalogMobile() {
                                     <Typography 
                                         variant="h1" 
                                         sx={{ 
-                                            mb: 2,
+                                            mb: 1.5,
                                             fontWeight: 900,
                                             fontSize: '2.2rem',
                                             textShadow: '0 2px 4px rgba(0,0,0,0.4)',
@@ -744,7 +681,7 @@ export default function CatalogMobile() {
                                 display: 'flex', 
                                 gap: 2, 
                                 alignItems: 'center', 
-                                mb: 2.5,
+                                mb: 2,
                                 flexWrap: 'wrap'
                             }}>
                                 {featuredContent.releaseInfo && (
@@ -792,7 +729,7 @@ export default function CatalogMobile() {
                                 <Typography 
                                     variant="body1" 
                                     sx={{ 
-                                        mb: 3.5,
+                                        mb: 2.5,
                                         color: alpha('#fff', 0.85),
                                         textShadow: '0 1px 2px rgba(0,0,0,0.4)',
                                         display: '-webkit-box',
@@ -800,7 +737,7 @@ export default function CatalogMobile() {
                                         WebkitBoxOrient: 'vertical',
                                         overflow: 'hidden',
                                         fontSize: '0.95rem',
-                                        lineHeight: 1.6,
+                                        lineHeight: 1.5,
                                         fontWeight: 400,
                                         letterSpacing: '0.01em'
                                     }}
@@ -813,7 +750,8 @@ export default function CatalogMobile() {
                                 display: 'flex', 
                                 gap: 1.5,
                                 width: '100%',
-                                mt: 1
+                                mt: 0.5,
+                                mb: 1
                             }}>
                                 <Button
                                     fullWidth

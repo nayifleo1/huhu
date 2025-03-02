@@ -14,11 +14,10 @@ import {
     BottomNavigationAction,
     Collapse,
     Slide,
-    Fade
+    Fade,
+    GlobalStyles
 } from '@mui/material';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import DownloadIcon from '@mui/icons-material/Download';
 import SurroundSoundIcon from '@mui/icons-material/SurroundSound';
 import FourKIcon from '@mui/icons-material/FourK';
 import BrightnessHighIcon from '@mui/icons-material/BrightnessHigh';
@@ -35,6 +34,7 @@ import { App } from '@capacitor/app';
 import ExoPlayer from '../plugins/ExoPlayerPlugin';
 import { Preferences } from '@capacitor/preferences';
 import ExternalPlayer from '../plugins/ExternalPlayerPlugin';
+import CastMemberPopup from './CastMemberPopup';
 
 // Add WebTorrent type declaration at the top of the file
 declare global {
@@ -123,7 +123,7 @@ interface Metadata {
     inProduction?: boolean;
     status?: string;
     lastAirDate?: string;
-    nextAirDate?: string;
+    nextAirDate?: string | null;
     episodeInfo?: {
         number: number;
         title?: string;
@@ -149,7 +149,7 @@ const MobileMetadataDialog = () => {
     const navigate = useNavigate();
     const [metadata, setMetadata] = useState<Metadata | null>(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [, setError] = useState<string | null>(null);
     const [groupedStreams, setGroupedStreams] = useState<GroupedStreams>({});
     const [loadingStreams, setLoadingStreams] = useState(false);
     const [selectedSeason, setSelectedSeason] = useState<number>(1);
@@ -159,6 +159,10 @@ const MobileMetadataDialog = () => {
     const [showStreamsPage, setShowStreamsPage] = useState(false);
     const prevLocation = useRef<string | null>(null);
     const stremioService = StremioService.getInstance();
+    
+    // State for cast member popup
+    const [selectedCastId, setSelectedCastId] = useState<number | null>(null);
+    const [castPopupOpen, setCastPopupOpen] = useState(false);
     
     // Scroll tracking for back button visibility
     const contentRef = useRef<HTMLDivElement>(null);
@@ -634,53 +638,14 @@ const MobileMetadataDialog = () => {
     };
 
     const isRealDebridCached = (stream: LocalStream) => {
-        // First check behaviorHints
-        if (stream.behaviorHints?.isRealDebridCached || stream.behaviorHints?.cached) {
-            return true;
-        }
-
-        // Check if stream is from Torrentio and has direct URL
-        const isTorrentioStream = stream.addonId === 'com.stremio.torrentio.addon';
-        const hasDirectUrl = stream.url && (
-            stream.url.startsWith('http') || 
-            stream.url.startsWith('https') ||
-            stream.url.includes('real-debrid.com') ||
-            stream.url.includes('debrid')
-        );
-
-        return isTorrentioStream && hasDirectUrl;
-    };
-
-    const formatTorrentioTitle = (stream: LocalStream) => {
-        const quality = stream.title?.match(/\d{3,4}p|4K|8K/i)?.[0]?.toUpperCase() || '';
-        const isDV = stream.title?.toLowerCase().includes('dv') || stream.title?.toLowerCase().includes('dolby vision');
-        const isHDR = stream.title?.toLowerCase().includes('hdr');
-        
-        let prefix = '[RD+] Torrentio';
-        if (quality.includes('2160') || quality === '4K') {
-            prefix += ' 4k';
-        } else if (quality.includes('1080')) {
-            prefix += ' 1080p';
-        }
-        
-        if (isDV) {
-            prefix += ' DV';
-        }
-        if (isHDR) {
-            prefix += ' | HDR';
-        }
-        
-        return `${prefix} • ${stream.title}`;
+        return stream.behaviorHints?.isRealDebridCached || false;
     };
 
     const formatStreamTitle = (stream: LocalStream) => {
-        if (stream.addonId === 'com.stremio.torrentio.addon') {
-            return formatTorrentioTitle(stream);
-        } else if (stream.addonName?.toLowerCase().includes('mediafusion')) {
-            // For MediaFusion, show both addon info and stream title
-            const addonPart = stream.title?.split('Stream (')?.[0]?.trim() || stream.addonName;
-            const titlePart = stream.name || '';
-            return `${addonPart} • ${titlePart}`;
+        if (stream.url.includes('mediafusion')) {
+            const quality = getStreamQualityInfo(stream);
+            // Set a clean title that shows it's from MediaFusion with quality if available
+            return quality ? `MediaFusion • ${quality}` : 'MediaFusion Stream';
         }
         return stream.title || stream.name || 'Unnamed Stream';
     };
@@ -728,8 +693,25 @@ const MobileMetadataDialog = () => {
                     >
                         {stream.addonId === 'com.stremio.torrentio.addon' 
                             ? `${stream.name} • ${stream.title}` 
-                            : (stream.title && stream.name ? `${stream.title} • ${stream.name}` : (stream.title || stream.name || 'Unnamed Stream'))}
+                            : stream.addonName?.toLowerCase().includes('mediafusion')
+                                ? formatStreamTitle(stream)
+                                : (stream.title && stream.name ? `${stream.title} • ${stream.name}` : (stream.title || stream.name || 'Unnamed Stream'))}
                     </Typography>
+                    {stream.addonName?.toLowerCase().includes('mediafusion') && (
+                        <Typography 
+                            variant="body2" 
+                            sx={{ 
+                                color: alpha('#fff', 0.7),
+                                fontSize: '0.85rem',
+                                mb: 1,
+                                overflow: 'hidden',
+                                wordBreak: 'break-word',
+                                lineHeight: 1.3
+                            }}
+                        >
+                            {stream.name || stream.title || ''}
+                        </Typography>
+                    )}
                     
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
                         {isRealDebridCached(stream) && stream.addonId !== 'com.stremio.torrentio.addon' && (
@@ -848,6 +830,17 @@ const MobileMetadataDialog = () => {
         await loadStreams(selectedSeason, episode.number);
     };
 
+    // Handle cast member click
+    const handleCastMemberClick = (castMember: CastMember) => {
+        setSelectedCastId(castMember.id);
+        setCastPopupOpen(true);
+    };
+
+    // Handle close cast popup
+    const handleCloseCastPopup = () => {
+        setCastPopupOpen(false);
+    };
+
     const renderInfo = () => {
         if (loading) {
             return (
@@ -873,10 +866,12 @@ const MobileMetadataDialog = () => {
                         width: '100%',
                         height: getHeroHeight(),
                         overflow: 'hidden',
+                        backgroundColor: '#000',
                     }}
                 >
-                    {(metadata.background || metadata.poster) ? (
+                    {(metadata.background || metadata.poster) && (
                         <Box
+                            component="div"
                             sx={{
                                 position: 'absolute',
                                 top: 0,
@@ -887,8 +882,8 @@ const MobileMetadataDialog = () => {
                                 backgroundSize: 'cover',
                                 backgroundPosition: 'center',
                                 filter: 'brightness(0.8)',
-                                transform: 'scale(1.1)',
-                                transition: 'transform 0.3s ease-out',
+                                opacity: 1,
+                                willChange: 'transform',
                                 '&::before': {
                                     content: '""',
                                     position: 'absolute',
@@ -896,19 +891,9 @@ const MobileMetadataDialog = () => {
                                     left: 0,
                                     right: 0,
                                     bottom: 0,
-                                    background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.4) 40%, rgba(0, 0, 0, 0.8) 70%, rgba(0, 0, 0, 0.95) 85%, rgba(0, 0, 0, 1) 100%)'
+                                    background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.4) 40%, rgba(0, 0, 0, 0.8) 70%, rgba(0, 0, 0, 0.95) 85%, rgba(0, 0, 0, 1) 100%)',
+                                    pointerEvents: 'none'
                                 }
-                            }}
-                        />
-                    ) : (
-                        <Box
-                            sx={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                background: 'linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)'
                             }}
                         />
                     )}
@@ -1123,12 +1108,21 @@ const MobileMetadataDialog = () => {
                                 {metadata.castData.slice(0, 10).map((cast: CastMember) => (
                                     <Box
                                         key={cast.id}
+                                        onClick={() => handleCastMemberClick(cast)}
                                                 sx={{
                                                     display: 'flex',
                                                     flexDirection: 'column',
                                                     alignItems: 'center',
                                             flexShrink: 0,
-                                            width: 80
+                                            width: 80,
+                                            cursor: 'pointer',
+                                            transition: 'transform 0.2s',
+                                            '&:hover': {
+                                                transform: 'scale(1.05)',
+                                                '& .cast-name': {
+                                                    color: theme.palette.primary.light
+                                                }
+                                            }
                                                 }}
                                             >
                                                 <Box
@@ -1153,6 +1147,7 @@ const MobileMetadataDialog = () => {
                                                         />
                                                 </Box>
                                                     <Typography
+                                            className="cast-name"
                                             variant="caption"
                                                         sx={{
                                                             color: '#fff',
@@ -1162,7 +1157,8 @@ const MobileMetadataDialog = () => {
                                                 maxWidth: '100%',
                                                             overflow: 'hidden',
                                                             textOverflow: 'ellipsis',
-                                                            whiteSpace: 'nowrap'
+                                                            whiteSpace: 'nowrap',
+                                                            transition: 'color 0.2s'
                                                         }}
                                                     >
                                             {cast.name}
@@ -1251,11 +1247,11 @@ const MobileMetadataDialog = () => {
                                             <Box
                                                 key={episode.number}
                                                 onClick={() => handleEpisodeClick(episode)}
-                                            sx={{
-                                                position: 'relative',
+                                                sx={{
+                                                    position: 'relative',
                                                     cursor: 'pointer',
-                                                borderRadius: 1,
-                                                overflow: 'hidden',
+                                                    borderRadius: 1,
+                                                    overflow: 'hidden',
                                                     aspectRatio: '16/9',
                                                     bgcolor: 'rgba(255,255,255,0.1)',
                                                     transition: 'all 0.2s',
@@ -1263,110 +1259,89 @@ const MobileMetadataDialog = () => {
                                                         transform: 'scale(1.02)',
                                                         '& img': {
                                                             filter: 'brightness(1.1)'
+                                                        },
+                                                        '& .episode-info': {
+                                                            background: 'linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0.7) 80%, transparent)'
                                                         }
                                                     }
                                                 }}
                                             >
-                                                {episode.thumbnail && (
+                                                {episode.thumbnail ? (
                                                     <Box
                                                         component="img"
-                                                    src={episode.thumbnail}
-                                                    alt={`Episode ${episode.number}`}
+                                                        src={episode.thumbnail}
+                                                        alt={`Episode ${episode.number}`}
                                                         sx={{
-                                                        width: '100%',
-                                                        height: '100%',
+                                                            width: '100%',
+                                                            height: '100%',
                                                             objectFit: 'cover',
                                                             transition: 'all 0.3s'
                                                         }}
-                                                />
+                                                        onError={(e) => {
+                                                            const img = e.target as HTMLImageElement;
+                                                            img.style.display = 'none';
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <Box
+                                                        sx={{
+                                                            width: '100%',
+                                                            height: '100%',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            bgcolor: 'rgba(255,255,255,0.05)',
+                                                            borderRadius: 1
+                                                        }}
+                                                    >
+                                                        <PlayCircleOutlineIcon sx={{ fontSize: 40, color: 'rgba(255,255,255,0.3)' }} />
+                                                    </Box>
                                                 )}
                                                 <Box
+                                                    className="episode-info"
                                                     sx={{
                                                         position: 'absolute',
                                                         bottom: 0,
                                                         left: 0,
                                                         right: 0,
-                                                        p: 1,
-                                                        background: 'linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0))'
+                                                        p: 1.5,
+                                                        background: 'linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0.6) 80%, transparent)',
+                                                        transition: 'background 0.3s'
                                                     }}
                                                 >
-                                            <Typography
+                                                    <Typography
                                                         variant="caption"
-                                                sx={{
-                                                    color: '#fff',
+                                                        sx={{
+                                                            color: alpha('#fff', 0.7),
                                                             fontSize: '0.7rem',
-                                                            fontWeight: 600
-                                                }}
-                                            >
+                                                            fontWeight: 500,
+                                                            display: 'block',
+                                                            mb: 0.5
+                                                        }}
+                                                    >
                                                         Episode {episode.number}
-                                            </Typography>
-                                    </Box>
+                                                    </Typography>
+                                                    <Typography
+                                                        variant="body2"
+                                                        sx={{
+                                                            color: '#fff',
+                                                            fontSize: '0.85rem',
+                                                            fontWeight: 600,
+                                                            lineHeight: 1.2,
+                                                            display: '-webkit-box',
+                                                            WebkitLineClamp: 2,
+                                                            WebkitBoxOrient: 'vertical',
+                                                            overflow: 'hidden'
+                                                        }}
+                                                    >
+                                                        {episode.title}
+                                                    </Typography>
+                                                </Box>
+                                            </Box>
+                                        ))}
                                 </Box>
-                            ))}
+                            )}
                         </Box>
-                    )}
-                        </Box>
-                    )}
-                </Box>
-
-                {error && (
-                    <Box sx={{ p: 2, mb: 2 }}>
-                        <Typography
-                            variant="body2"
-                            sx={{
-                                color: theme.palette.warning.main,
-                                bgcolor: alpha(theme.palette.warning.main, 0.1),
-                                p: 2,
-                                borderRadius: 1,
-                                border: `1px solid ${alpha(theme.palette.warning.main, 0.2)}`
-                            }}
-                        >
-                            {error}
-                        </Typography>
-                    </Box>
-                )}
-
-                <Box
-                    sx={{
-                        position: 'fixed',
-                        bottom: { xs: 56, sm: 0 },
-                        left: 0,
-                        right: 0,
-                        px: 2,
-                        pb: 2,
-                        pt: 0,
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0.8) 50%, transparent)',
-                        zIndex: 1400,
-                        display: showStreamsPage ? 'none' : 'block',
-                        transform: 'translateZ(0)',
-                        backfaceVisibility: 'hidden',
-                        WebkitBackfaceVisibility: 'hidden'
-                    }}
-                >
-                    {type !== 'series' && (
-                        <Button
-                            fullWidth
-                            variant="contained"
-                            size="large"
-                            onClick={handleShowStreams}
-                            startIcon={<PlayArrowIcon />}
-                            disableRipple
-                            sx={{
-                                bgcolor: '#fff',
-                                color: '#000',
-                                borderRadius: '100px',
-                                py: 1.5,
-                                fontSize: '0.95rem',
-                                fontWeight: 600,
-                                textTransform: 'none',
-                                transform: 'translateZ(0)',
-                                '&:hover': {
-                                    bgcolor: alpha('#fff', 0.9)
-                                }
-                            }}
-                        >
-                            Play
-                        </Button>
                     )}
                 </Box>
             </Box>
@@ -1488,7 +1463,7 @@ const MobileMetadataDialog = () => {
                         </Box>
                     )}
 
-                    <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Box sx={{ p: 2, pt: 4, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                         <IconButton
                             onClick={() => setShowStreamsPage(false)}
                             sx={{ 
@@ -1577,6 +1552,7 @@ const MobileMetadataDialog = () => {
                         overflowY: 'auto',
                         overflowX: 'hidden',
                         p: 2.5,
+                        pt: 2,
                         pb: 8,
                         WebkitOverflowScrolling: 'touch',
                         msOverflowStyle: 'none',
@@ -1752,126 +1728,166 @@ const MobileMetadataDialog = () => {
     }
 
     return (
-        <Fade in appear mountOnEnter unmountOnExit timeout={400}>
-            <Box sx={{ 
-                height: '100vh',
-                width: '100vw',
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                zIndex: theme.zIndex.modal,
-                background: 'linear-gradient(135deg, #000000 0%, #000000 100%)',
-                overflowX: 'hidden'
-            }}>
-                {/* Info Page - Always rendered */}
+        <>
+            <GlobalStyles styles={{
+                '*': {
+                    WebkitTapHighlightColor: 'transparent',
+                    WebkitTouchCallout: 'none',
+                    WebkitUserSelect: 'none',
+                    userSelect: 'none',
+                    '&:focus': {
+                        outline: 'none !important',
+                        backgroundColor: 'transparent !important',
+                    },
+                    '&:active': {
+                        outline: 'none !important',
+                        backgroundColor: 'transparent !important',
+                    },
+                    '&:focus-visible': {
+                        outline: 'none !important',
+                        backgroundColor: 'transparent !important',
+                    }
+                },
+                'button, a': {
+                    WebkitTapHighlightColor: 'transparent !important',
+                    '&:focus': {
+                        outline: 'none !important',
+                        backgroundColor: 'transparent !important',
+                    },
+                    '&:active': {
+                        outline: 'none !important',
+                        backgroundColor: 'transparent !important',
+                    }
+                }
+            }} />
+            <Fade in appear mountOnEnter unmountOnExit timeout={400}>
                 <Box sx={{ 
-                    height: '100%',
-                    width: '100%',
-                    position: 'absolute',
+                    height: '100vh',
+                    width: '100vw',
+                    position: 'fixed',
                     top: 0,
                     left: 0,
-                    overflowY: 'auto',
-                    WebkitOverflowScrolling: 'touch',
-                    filter: showStreamsPage ? 'brightness(0.5)' : 'none',
-                    transition: 'filter 0.3s ease'
+                    zIndex: theme.zIndex.modal,
+                    background: 'linear-gradient(135deg, #000000 0%, #000000 100%)',
+                    overflowX: 'hidden'
                 }}>
-                    {renderInfo()}
-                </Box>
-
-                {/* Streams Page - Overlay with slide animation */}
-                <Box
-                    sx={{
+                    {/* Info Page - Always rendered */}
+                    <Box sx={{ 
+                        height: '100%',
+                        width: '100%',
                         position: 'absolute',
                         top: 0,
                         left: 0,
-                        right: 0,
-                        bottom: 0,
-                        background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.97) 100%)',
-                        transform: `translateX(${showStreamsPage ? '0%' : '100%'})`,
-                        transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
-                        zIndex: 1,
                         overflowY: 'auto',
                         WebkitOverflowScrolling: 'touch',
-                        backdropFilter: 'blur(20px)',
-                        boxShadow: showStreamsPage ? '-8px 0 24px rgba(0,0,0,0.4)' : 'none',
-                        borderLeft: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`
-                    }}
-                >
-                    {renderStreams()}
-                </Box>
+                        filter: showStreamsPage ? 'brightness(0.5)' : 'none',
+                        transition: 'filter 0.3s ease'
+                    }}>
+                        {renderInfo()}
+                    </Box>
 
-                {/* Back Button - Only show when streams page is NOT visible */}
-                <Slide appear={false} direction="down" in={showNavigation && !showStreamsPage}>
-                    <IconButton
-                        onClick={handleBack}
+                    {/* Streams Page - Overlay with slide animation */}
+                    <Box
                         sx={{
-                            position: 'fixed',
-                            top: 32,
-                            left: 16,
-                            zIndex: 1200,
-                            padding: '8px',
-                            color: '#fff',
-                            bgcolor: alpha('#000', 0.5),
-                            backdropFilter: 'blur(4px)',
-                            '&:hover': {
-                                color: theme.palette.primary.main,
-                                bgcolor: alpha('#000', 0.7)
-                            }
-                        }}
-                    >
-                        <ArrowBackIcon fontSize="large" />
-                    </IconButton>
-                </Slide>
-
-                {/* Bottom Navigation */}
-                <Fade in appear={false} timeout={300}>
-                    <BottomNavigation
-                        value={showStreamsPage ? 'streams' : 'info'}
-                        onChange={(_, newValue) => {
-                            if (newValue === 'streams') {
-                                handleShowStreams();
-                            } else {
-                                setShowStreamsPage(false);
-                            }
-                        }}
-                        sx={{
-                            position: 'fixed',
-                            bottom: 0,
+                            position: 'absolute',
+                            top: 0,
                             left: 0,
                             right: 0,
-                            height: 64,
-                            background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.98) 100%)',
+                            bottom: 0,
+                            background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.97) 100%)',
+                            transform: `translateX(${showStreamsPage ? '0%' : '100%'})`,
+                            transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+                            zIndex: 1,
+                            overflowY: 'auto',
+                            WebkitOverflowScrolling: 'touch',
                             backdropFilter: 'blur(20px)',
-                            borderTop: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                            zIndex: 2
+                            boxShadow: showStreamsPage ? '-8px 0 24px rgba(0,0,0,0.4)' : 'none',
+                            borderLeft: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`
                         }}
                     >
-                        <BottomNavigationAction
-                            label="Info"
-                            value="info"
-                            icon={<InfoIcon />}
+                        {renderStreams()}
+                    </Box>
+
+                    {/* Back Button - Only show when streams page is NOT visible */}
+                    <Slide appear={false} direction="down" in={showNavigation && !showStreamsPage}>
+                        <IconButton
+                            onClick={handleBack}
                             sx={{
-                                color: alpha('#fff', 0.7),
-                                '&.Mui-selected': {
-                                    color: theme.palette.primary.main
+                                position: 'fixed',
+                                top: 32,
+                                left: 16,
+                                zIndex: 1200,
+                                padding: '8px',
+                                color: '#fff',
+                                bgcolor: alpha('#000', 0.5),
+                                backdropFilter: 'blur(4px)',
+                                '&:hover': {
+                                    color: theme.palette.primary.main,
+                                    bgcolor: alpha('#000', 0.7)
                                 }
                             }}
-                        />
-                        <BottomNavigationAction
-                            label="Streams"
-                            value="streams"
-                            icon={<PlayCircleOutlineIcon />}
-                            sx={{
-                                color: alpha('#fff', 0.7),
-                                '&.Mui-selected': {
-                                    color: theme.palette.primary.main
+                        >
+                            <ArrowBackIcon fontSize="large" />
+                        </IconButton>
+                    </Slide>
+
+                    {/* Bottom Navigation */}
+                    <Fade in appear={false} timeout={300}>
+                        <BottomNavigation
+                            value={showStreamsPage ? 'streams' : 'info'}
+                            onChange={(_, newValue) => {
+                                if (newValue === 'streams') {
+                                    handleShowStreams();
+                                } else {
+                                    setShowStreamsPage(false);
                                 }
                             }}
-                        />
-                    </BottomNavigation>
-                </Fade>
-            </Box>
-        </Fade>
+                            sx={{
+                                position: 'fixed',
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                height: 64,
+                                background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.98) 100%)',
+                                backdropFilter: 'blur(20px)',
+                                borderTop: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                                zIndex: 2
+                            }}
+                        >
+                            <BottomNavigationAction
+                                label="Info"
+                                value="info"
+                                icon={<InfoIcon />}
+                                sx={{
+                                    color: alpha('#fff', 0.7),
+                                    '&.Mui-selected': {
+                                        color: theme.palette.primary.main
+                                    }
+                                }}
+                            />
+                            <BottomNavigationAction
+                                label="Streams"
+                                value="streams"
+                                icon={<PlayCircleOutlineIcon />}
+                                sx={{
+                                    color: alpha('#fff', 0.7),
+                                    '&.Mui-selected': {
+                                        color: theme.palette.primary.main
+                                    }
+                                }}
+                            />
+                        </BottomNavigation>
+                    </Fade>
+                    
+                    {/* Cast Member Popup */}
+                    <CastMemberPopup 
+                        open={castPopupOpen}
+                        onClose={handleCloseCastPopup}
+                        castId={selectedCastId}
+                    />
+                </Box>
+            </Fade>
+        </>
     );
 };
 

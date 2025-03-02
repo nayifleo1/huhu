@@ -1,11 +1,43 @@
 import axios from 'axios';
-import { Manifest, StreamResponse, Meta, Stream } from '../types/stremio';
+import { Stream, StreamResponse, Meta } from '../types/stremio';
 
-interface CatalogOptions {
-  skip?: string;
-  genre?: string;
-  search?: string;
-  limit?: number;
+interface CatalogFilter {
+  title: string;
+  value: any;
+}
+
+interface Catalog {
+  type: string;
+  id: string;
+  name: string;
+  extraSupported?: string[];
+  extraRequired?: string[];
+  itemCount?: number;
+}
+
+interface ResourceObject {
+  name: string;
+  types: string[];
+  idPrefixes?: string[];
+  idPrefix?: string[];
+}
+
+interface Manifest {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  url?: string;
+  originalUrl?: string;
+  catalogs?: Catalog[];
+  resources?: ResourceObject[];
+  types?: string[];
+  idPrefixes?: string[];
+  manifestVersion?: string;
+  queryParams?: string;
+  behaviorHints?: {
+    configurable?: boolean;
+  };
 }
 
 interface MetaDetails extends Meta {
@@ -45,7 +77,7 @@ class StremioService {
     'https://torrentio.strem.fun/manifest.json'
   ];
   private readonly MAX_CONCURRENT_REQUESTS = 3;
-  private readonly DEFAULT_PAGE_SIZE = 100;
+  private readonly DEFAULT_PAGE_SIZE = 50;
 
   private constructor() {
     this.loadInstalledAddons();
@@ -211,7 +243,7 @@ class StremioService {
       for (const catalog of addon.catalogs) {
         try {
           console.log(`Fetching catalog ${catalog.type}/${catalog.id} from ${addon.name}`);
-          const items = await this.getCatalogWithPagination(addon.id, catalog.type, catalog.id);
+          const items = await this.getCatalog(addon, catalog.type, catalog.id);
           results[addon.id].push(...items);
         } catch (error) {
           console.error(`Error fetching catalog from ${addon.name}:`, error);
@@ -222,37 +254,57 @@ class StremioService {
     return results;
   }
 
-  async getCatalogWithPagination(addonId: string, type: string, id: string, options: CatalogOptions = {}): Promise<Meta[]> {
-    const allItems: Meta[] = [];
-    let skip = 0;
-    const limit = options.limit || this.DEFAULT_PAGE_SIZE;
-    let hasMore = true;
+  async getCatalog(manifest: Manifest, type: string, id: string, page?: number, filters: CatalogFilter[] = []): Promise<Meta[]> {
+    let url = `${this.getAddonBaseURL(manifest.url || manifest.originalUrl!)}/catalog/${type}/${id}`;
 
-    while (hasMore) {
-      try {
-        const items = await this.getCatalog(addonId, type, id, { ...options, skip: skip.toString() });
-        if (!items || items.length === 0) {
-          hasMore = false;
-          break;
-        }
-
-        allItems.push(...items);
-        skip += items.length;
-
-        if (options.limit && allItems.length >= options.limit) {
-          allItems.splice(options.limit);
-          break;
-        }
-
-        // Add a small delay to avoid overwhelming the server
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (error) {
-        console.error(`Error fetching page ${skip} from ${addonId}:`, error);
-        hasMore = false;
-      }
+    const catalog = manifest.catalogs?.find(item => item.type === type && item.id === id);
+    if (!catalog) {
+      console.log("Catalog not found", type, id);
+      return [];
     }
 
-    return allItems;
+    // Handle filters and pagination
+    if (page !== undefined && catalog.extraSupported?.includes('skip')) {
+      filters.push({ title: 'skip', value: page * this.DEFAULT_PAGE_SIZE });
+    }
+
+    if (manifest.manifestVersion === 'v2') {
+      if (filters.length > 0) {
+        const queryParams = filters
+          .filter(filter => catalog.extraSupported?.includes(filter.title))
+          .map(filter => `${filter.title}=${encodeURIComponent(filter.value)}`)
+          .join('&');
+
+        if (queryParams) {
+          url += `?${queryParams}`;
+        }
+      }
+    } else {
+      if (filters.length > 0) {
+        const filterPath = filters
+          .filter(filter => catalog.extraSupported?.includes(filter.title))
+          .map(filter => `${filter.title}=${encodeURIComponent(filter.value)}`)
+          .join('/');
+
+        if (filterPath) {
+          url += `/${filterPath}`;
+        }
+      }
+      url += '.json';
+    }
+
+    try {
+      const response = await axios.get(url);
+      console.log("Getting catalog from", url);
+      return response.data.metas || [];
+    } catch (error) {
+      console.error('Error fetching catalog:', error);
+      return [];
+    }
+  }
+
+  private getAddonBaseURL(url: string): string {
+    return url.endsWith('/manifest.json') ? url.replace('/manifest.json', '') : url;
   }
 
   async getMetaDetails(type: string, id: string): Promise<MetaDetails | null> {
@@ -304,7 +356,7 @@ class StremioService {
     return results;
   }
 
-  async getStreams(type: string, id: string): Promise<StreamResponse[]> {
+  async getStreams(type: string, id: string, callback?: (streams: Stream[] | null, addonName: string | null, error: Error | null) => void): Promise<StreamResponse[]> {
     const responses: StreamResponse[] = [];
     const formattedId = this.formatId(id);
     
@@ -312,15 +364,31 @@ class StremioService {
       .filter(addon => {
         const streamResource = addon.resources?.find(r => r.name === 'stream');
         return streamResource && 
-               streamResource.types.includes(type) && 
+               streamResource.types?.includes(type) && 
                (!streamResource.idPrefixes || streamResource.idPrefixes.some(prefix => formattedId.startsWith(prefix)));
       });
 
-    // Process addons in batches to avoid overwhelming the network
+    // Process addons in parallel with batching
     const batchSize = this.MAX_CONCURRENT_REQUESTS;
     for (let i = 0; i < streamingAddons.length; i += batchSize) {
       const batch = streamingAddons.slice(i, i + batchSize);
-      const batchPromises = batch.map(addon => this.fetchStreamsFromAddon(addon, type, formattedId));
+      const batchPromises = batch.map(async (addon) => {
+        try {
+          const result = await this.fetchStreamsFromAddon(addon, type, formattedId);
+          if (result && result.streams.length > 0) {
+            if (callback) {
+              callback(result.streams, addon.name, null);
+            }
+            return result;
+          }
+        } catch (error) {
+          console.error(`Error fetching streams from ${addon.name}:`, error);
+          if (callback) {
+            callback(null, addon.name, error as Error);
+          }
+        }
+        return null;
+      });
       
       const results = await Promise.all(batchPromises);
       results.forEach(result => {
@@ -346,20 +414,97 @@ class StremioService {
         return null;
       }
 
-      const streamUrl = `${baseUrl}/stream/${type}/${id}.json${queryParams}`;
+      // Construct the stream URL
+      let streamUrl;
       
-      const response = await this.retryRequest(() => axios.get<StreamResponse>(streamUrl));
+      // Special handling for MediaFusion
+      if (addon.name?.toLowerCase().includes('mediafusion')) {
+        // For MediaFusion, we need to use the original URL with the token
+        const baseMediaFusionUrl = addon.originalUrl?.replace('/manifest.json', '');
+        if (!baseMediaFusionUrl) {
+          console.error('MediaFusion URL is invalid:', addon.originalUrl);
+          return null;
+        }
+
+        // For series, ensure we're using the correct format tt123:1:1
+        if (type === 'series') {
+          // If id doesn't include season/episode info, it's invalid
+          if (!id.includes(':')) {
+            console.error('Invalid series ID format for MediaFusion:', id);
+            return null;
+          }
+
+          // Extract IMDB ID and validate format
+          const [imdbId, season, episode] = id.split(':');
+          if (!imdbId || !season || !episode) {
+            console.error('Invalid series ID components for MediaFusion:', { imdbId, season, episode });
+            return null;
+          }
+
+          // Ensure IMDB ID starts with 'tt'
+          const formattedImdbId = imdbId.startsWith('tt') ? imdbId : `tt${imdbId}`;
+          streamUrl = `${baseMediaFusionUrl}/stream/series/${formattedImdbId}:${season}:${episode}.json`;
+        } else {
+          streamUrl = `${baseMediaFusionUrl}/stream/${type}/${id}.json`;
+        }
+
+        console.log(`Fetching MediaFusion streams from: ${streamUrl}`);
+      } else {
+        streamUrl = `${baseUrl}/stream/${type}/${id}.json${queryParams}`;
+      }
+      
+      const response = await this.retryRequest(() => axios.get<StreamResponse>(streamUrl), 3, 2000);
       
       if (!response.data.streams?.length) {
+        console.log(`No streams found from ${addon.name} for ${type}/${id}`);
         return null;
       }
 
-      const processedStreams = this.processStreams(response.data.streams, addon);
+      // Process streams based on addon type
+      let processedStreams = this.processStreams(response.data.streams, addon);
+      
+      // Additional processing for MediaFusion streams
+      if (addon.name?.toLowerCase().includes('mediafusion')) {
+        processedStreams = processedStreams.map(stream => {
+          // Extract quality from the stream name if available
+          const quality = stream.name?.match(/\d{3,4}[pP]/)?.[0] || '';
+          const originalName = stream.name || stream.title || '';
+          
+          return {
+            ...stream,
+            // Keep the original name which contains full info
+            name: originalName,
+            // Set a clean title that shows it's from MediaFusion
+            title: quality ? `MediaFusion • ${quality}` : 'MediaFusion Stream',
+            behaviorHints: {
+              ...stream.behaviorHints,
+              // MediaFusion streams are typically web-ready
+              notWebReady: false,
+              proxyHeaders: stream.behaviorHints?.proxyHeaders || {},
+              // Add quality info to behavior hints if needed
+              quality: quality
+            }
+          };
+        });
+      }
       
       return processedStreams.length > 0 ? { streams: processedStreams } : null;
 
     } catch (error) {
-      console.error(`Error fetching streams from ${addon.name}:`, error);
+      // More detailed error logging for MediaFusion
+      if (addon.name?.toLowerCase().includes('mediafusion')) {
+        console.error(`Error fetching streams from MediaFusion | ${addon.name}:`, {
+          error,
+          type,
+          id,
+          url: addon.url,
+          originalUrl: addon.originalUrl,
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          errorStack: error instanceof Error ? error.stack : undefined
+        });
+      } else {
+        console.error(`Error fetching streams from ${addon.name}:`, error);
+      }
       return null;
     }
   }
@@ -454,26 +599,6 @@ class StremioService {
     return '';
   }
 
-  async getCatalog(addonId: string, type: string, id: string, options: CatalogOptions = {}): Promise<Meta[]> {
-    const addon = this.installedAddons.get(addonId);
-    if (!addon) throw new Error('Addon not found');
-    if (!addon.url) throw new Error('Addon URL not found');
-
-    try {
-      const queryParams = new URLSearchParams();
-      if (options.skip) queryParams.append('skip', options.skip);
-      if (options.genre) queryParams.append('genre', options.genre);
-      if (options.search) queryParams.append('search', options.search);
-
-      const url = `${addon.url}catalog/${type}/${id}.json${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-      const response = await axios.get<{ metas: Meta[] }>(url);
-      return response.data.metas;
-    } catch (error) {
-      console.error('Error fetching catalog:', error);
-      throw error;
-    }
-  }
-
   getAddonCapabilities(): AddonCapabilities[] {
     return Array.from(this.installedAddons.values()).map(addon => ({
       name: addon.name,
@@ -492,7 +617,7 @@ class StremioService {
     items: Meta[];
   }> {
     try {
-      const items = await this.getCatalog(addonId, type, id, { limit });
+      const items = await this.getCatalog(this.installedAddons.get(addonId)!, type, id, undefined, [{ title: 'limit', value: limit }]);
       return {
         addon: this.installedAddons.get(addonId)?.name || addonId,
         type,
@@ -546,7 +671,7 @@ class StremioService {
       for (const catalog of addon.catalogs) {
         try {
           console.log(`Fetching example items from ${addon.name} catalog: ${catalog.type}/${catalog.id}`);
-          const items = await this.getCatalog(addon.id, catalog.type, catalog.id, { limit: 5 });
+          const items = await this.getCatalog(addon, catalog.type, catalog.id, undefined, [{ title: 'limit', value: 5 }]);
           
           results[addon.id].catalogs.push({
             type: catalog.type,
@@ -600,6 +725,16 @@ class StremioService {
     } catch (error) {
       console.error('Error previewing addon:', error);
       throw new Error('Failed to preview addon. Please check the URL and try again.');
+    }
+  }
+
+  async getMeta(type: string, id: string): Promise<Meta | null> {
+    try {
+      const response = await axios.get(`https://v3-cinemeta.strem.io/meta/${type}/${id}.json`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching meta:', error);
+      return null;
     }
   }
 }
