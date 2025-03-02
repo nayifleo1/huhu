@@ -1,10 +1,38 @@
 import axios from 'axios';
-import { Manifest, StreamResponse, Meta } from '../types/stremio';
+import { Manifest, StreamResponse, Meta, Stream } from '../types/stremio';
 
 interface CatalogOptions {
   skip?: string;
   genre?: string;
   search?: string;
+  limit?: number;
+}
+
+interface MetaDetails extends Meta {
+  videos?: {
+    id: string;
+    title: string;
+    released: string;
+    season?: number;
+    episode?: number;
+  }[];
+}
+
+interface AddonCapabilities {
+  name: string;
+  id: string;
+  version: string;
+  catalogs: {
+    type: string;
+    id: string;
+    name: string;
+  }[];
+  resources: {
+    name: string;
+    types: string[];
+    idPrefixes?: string[];
+  }[];
+  types: string[];
 }
 
 class StremioService {
@@ -13,8 +41,11 @@ class StremioService {
   private readonly STORAGE_KEY = 'stremio-addons';
   private readonly DEFAULT_ADDONS = [
     'https://v3-cinemeta.strem.io/manifest.json',
-    'https://opensubtitles-v3.strem.io/manifest.json'
+    'https://opensubtitles-v3.strem.io/manifest.json',
+    'https://torrentio.strem.fun/manifest.json'
   ];
+  private readonly MAX_CONCURRENT_REQUESTS = 3;
+  private readonly DEFAULT_PAGE_SIZE = 100;
 
   private constructor() {
     this.loadInstalledAddons();
@@ -168,6 +199,111 @@ class StremioService {
     return id;
   }
 
+  async getAllCatalogs(): Promise<{ [addonId: string]: Meta[] }> {
+    const results: { [addonId: string]: Meta[] } = {};
+    const addons = Array.from(this.installedAddons.values());
+
+    for (const addon of addons) {
+      if (!addon.catalogs || addon.catalogs.length === 0) continue;
+
+      results[addon.id] = [];
+      
+      for (const catalog of addon.catalogs) {
+        try {
+          console.log(`Fetching catalog ${catalog.type}/${catalog.id} from ${addon.name}`);
+          const items = await this.getCatalogWithPagination(addon.id, catalog.type, catalog.id);
+          results[addon.id].push(...items);
+        } catch (error) {
+          console.error(`Error fetching catalog from ${addon.name}:`, error);
+        }
+      }
+    }
+
+    return results;
+  }
+
+  async getCatalogWithPagination(addonId: string, type: string, id: string, options: CatalogOptions = {}): Promise<Meta[]> {
+    const allItems: Meta[] = [];
+    let skip = 0;
+    const limit = options.limit || this.DEFAULT_PAGE_SIZE;
+    let hasMore = true;
+
+    while (hasMore) {
+      try {
+        const items = await this.getCatalog(addonId, type, id, { ...options, skip: skip.toString() });
+        if (!items || items.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        allItems.push(...items);
+        skip += items.length;
+
+        if (options.limit && allItems.length >= options.limit) {
+          allItems.splice(options.limit);
+          break;
+        }
+
+        // Add a small delay to avoid overwhelming the server
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error(`Error fetching page ${skip} from ${addonId}:`, error);
+        hasMore = false;
+      }
+    }
+
+    return allItems;
+  }
+
+  async getMetaDetails(type: string, id: string): Promise<MetaDetails | null> {
+    const addons = Array.from(this.installedAddons.values())
+      .filter(addon => addon.resources?.some(r => r.name === 'meta' && r.types.includes(type)));
+
+    for (const addon of addons) {
+      try {
+        if (!addon.url) continue;
+
+        const url = `${addon.url}/meta/${type}/${this.formatId(id)}.json`;
+        const response = await this.retryRequest(() => axios.get<{ meta: MetaDetails }>(url));
+        
+        if (response.data?.meta) {
+          return response.data.meta;
+        }
+      } catch (error) {
+        console.error(`Error fetching meta from ${addon.name}:`, error);
+      }
+    }
+
+    return null;
+  }
+
+  async getSubtitles(type: string, id: string, videoId?: string): Promise<any[]> {
+    const subtitleAddons = Array.from(this.installedAddons.values())
+      .filter(addon => addon.resources?.some(r => r.name === 'subtitles' && r.types.includes(type)));
+
+    const results = [];
+    
+    for (const addon of subtitleAddons) {
+      try {
+        if (!addon.url) continue;
+
+        const url = `${addon.url}/subtitles/${type}/${this.formatId(id)}${videoId ? '/' + videoId : ''}.json`;
+        const response = await this.retryRequest(() => axios.get(url));
+        
+        if (response.data?.subtitles) {
+          results.push({
+            addonName: addon.name,
+            subtitles: response.data.subtitles
+          });
+        }
+      } catch (error) {
+        console.error(`Error fetching subtitles from ${addon.name}:`, error);
+      }
+    }
+
+    return results;
+  }
+
   async getStreams(type: string, id: string): Promise<StreamResponse[]> {
     const responses: StreamResponse[] = [];
     const formattedId = this.formatId(id);
@@ -175,213 +311,147 @@ class StremioService {
     const streamingAddons = Array.from(this.installedAddons.values())
       .filter(addon => {
         const streamResource = addon.resources?.find(r => r.name === 'stream');
-        if (!streamResource) return false;
-        
-        // Check if addon supports this content type
-        const supportsType = streamResource.types.includes(type);
-        
-        // Check if addon supports this ID prefix (if specified)
-        const supportsIdPrefix = !streamResource.idPrefixes || 
-          streamResource.idPrefixes.some(prefix => formattedId.startsWith(prefix));
-
-        // Log addon details for debugging
-        console.log('Checking addon:', {
-          name: addon.name,
-          id: addon.id,
-          url: addon.url,
-          originalUrl: addon.originalUrl,
-          isDebridEnabled: addon.isDebridEnabled,
-          supportsType,
-          supportsIdPrefix,
-          resources: addon.resources
-        });
-        
-        return supportsType && supportsIdPrefix;
+        return streamResource && 
+               streamResource.types.includes(type) && 
+               (!streamResource.idPrefixes || streamResource.idPrefixes.some(prefix => formattedId.startsWith(prefix)));
       });
-    
-    if (streamingAddons.length === 0) {
-      console.warn('No compatible streaming addons found for this content.');
-      return [];
-    }
-    
-    const fetchPromises = streamingAddons.map(async (addon) => {
-      try {
-        // Always use the original URL with its configuration
-        const baseUrl = addon.url;
-        const queryParams = addon.queryParams || '';
 
-        if (!baseUrl) {
-          console.error(`No URL found for addon ${addon.name} (${addon.id})`);
-          return null;
-        }
+    // Process addons in batches to avoid overwhelming the network
+    const batchSize = this.MAX_CONCURRENT_REQUESTS;
+    for (let i = 0; i < streamingAddons.length; i += batchSize) {
+      const batch = streamingAddons.slice(i, i + batchSize);
+      const batchPromises = batch.map(addon => this.fetchStreamsFromAddon(addon, type, formattedId));
+      
+      const results = await Promise.all(batchPromises);
+      results.forEach(result => {
+        if (result) responses.push(result);
+      });
 
-        // Construct stream URL with proper configuration
-        const streamUrl = `${baseUrl}/stream/${type}/${formattedId}.json${queryParams}`;
-
-        console.log(`Fetching streams for ${type}/${formattedId} from addon:`, {
-          name: addon.name,
-          id: addon.id,
-          baseUrl,
-          streamUrl,
-          isDebridEnabled: addon.isDebridEnabled,
-          types: addon.resources?.find(r => r.name === 'stream')?.types,
-          idPrefixes: addon.resources?.find(r => r.name === 'stream')?.idPrefixes
-        });
-        
-        // Use retry mechanism for the request
-        const response = await this.retryRequest(() => axios.get<StreamResponse>(streamUrl));
-        
-        if (response.data.streams?.length > 0) {
-          // Log raw stream data for debugging
-          console.log(`Raw streams from ${addon.name}:`, 
-            response.data.streams.slice(0, 2).map(s => ({
-              ...s,
-              url: s.url?.substring(0, 100) + '...'
-            }))
-          );
-          
-          // Add addon info and validate each stream
-          const validStreams = response.data.streams
-            .filter(stream => {
-              // For Torrentio streams, check for infoHash instead of url
-              const isTorrentioStream = stream.infoHash && stream.fileIdx !== undefined;
-              const isValid = stream && (stream.url || isTorrentioStream) && (stream.title || stream.name);
-              if (!isValid) {
-                console.log('Invalid stream:', stream);
-              }
-              return isValid;
-            })
-            .map(stream => {
-              // Detect if this is a direct streaming URL (including RD links)
-              const isDirectStreamingUrl = stream.url && (
-                stream.url.startsWith('http') || 
-                stream.url.startsWith('https') ||
-                // Common RD and direct streaming patterns
-                stream.url.includes('real-debrid.com') ||
-                stream.url.includes('debrid') ||
-                stream.url.includes('stream') ||
-                stream.url.includes('cdn') ||
-                // Check stream properties that indicate it's from RD
-                stream.name?.toLowerCase().includes('rd') ||
-                stream.name?.toLowerCase().includes('debrid') ||
-                stream.title?.toLowerCase().includes('rd') ||
-                stream.title?.toLowerCase().includes('debrid')
-              );
-
-              // For Torrentio streams, construct magnet URL if needed
-              let streamUrl = stream.url;
-              let isMagnetStream = false;
-              
-              if (streamUrl?.startsWith('magnet:')) {
-                isMagnetStream = true;
-              } else if (!streamUrl && stream.infoHash && !isDirectStreamingUrl) {
-                // Construct magnet link only for non-direct streaming URLs
-                const trackers = [
-                  'udp://tracker.opentrackr.org:1337/announce',
-                  'udp://9.rarbg.com:2810/announce',
-                  'udp://tracker.openbittorrent.com:6969/announce',
-                  'udp://tracker.torrent.eu.org:451/announce',
-                  'udp://open.stealth.si:80/announce',
-                  'udp://tracker.leechers-paradise.org:6969/announce',
-                  'udp://tracker.coppersurfer.tk:6969/announce',
-                  'udp://tracker.internetwarriors.net:1337/announce'
-                ];
-                const trackersString = trackers.map(t => `&tr=${encodeURIComponent(t)}`).join('');
-                const encodedTitle = encodeURIComponent(stream.title || stream.name || 'Unknown');
-                streamUrl = `magnet:?xt=urn:btih:${stream.infoHash}&dn=${encodedTitle}${trackersString}`;
-                isMagnetStream = true;
-              }
-
-              // Log stream detection for debugging
-              console.log('Stream detection:', {
-                name: stream.name,
-                isDirectStreamingUrl,
-                isMagnetStream,
-                url: stream.url?.substring(0, 50) + '...',
-                hasInfoHash: !!stream.infoHash,
-                addon: addon.name
-              });
-
-              // Create properly formatted stream object
-              const formattedStream = {
-                ...stream,
-                url: streamUrl,
-                addonName: addon.name,
-                addonId: addon.id,
-                name: stream.name || stream.title || 'Unknown',
-                title: stream.title || stream.name || 'Unknown',
-                // Ensure behaviorHints is properly structured
-                behaviorHints: {
-                  ...stream.behaviorHints,
-                  notWebReady: !isDirectStreamingUrl,
-                  isMagnetStream,
-                  // Add magnet-specific properties if it's a magnet link
-                  ...(isMagnetStream && {
-                    infoHash: stream.infoHash || streamUrl?.match(/btih:([a-zA-Z0-9]+)/)?.[1],
-                    fileIdx: stream.fileIdx,
-                    magnetUrl: streamUrl,
-                    // Add additional properties for magnet handling
-                    type: 'torrent',
-                    sources: stream.sources || [],
-                    seeders: stream.seeders,
-                    size: stream.size,
-                    title: stream.title || stream.name,
-                  })
-                }
-              };
-              
-              return formattedStream;
-            });
-
-          console.log(`Processed ${validStreams.length} valid streams from ${addon.name}`);
-
-          if (validStreams.length > 0) {
-            return {
-              ...response.data,
-              streams: validStreams
-            };
-          } else {
-            console.log(`No valid streams found from ${addon.name} after processing`);
-          }
-        } else {
-          console.log(`No streams found from ${addon.name} for ${type}/${formattedId}`);
-        }
-        return null;
-      } catch (error: any) {
-        console.error(`Error fetching streams from ${addon.name}:`, {
-          error: error.message,
-          addonId: addon.id,
-          type,
-          id: formattedId,
-          isDebridEnabled: addon.isDebridEnabled
-        });
-        return null;
+      // Add a small delay between batches
+      if (i + batchSize < streamingAddons.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-    });
-
-    // Wait for all requests to complete
-    const results = await Promise.all(fetchPromises);
-    
-    // Filter out null results and add valid responses
-    results.forEach(result => {
-      if (result && result.streams?.length > 0) {
-        responses.push(result);
-      }
-    });
-
-    const totalStreams = responses.reduce((acc, r) => acc + (r.streams?.length || 0), 0);
-    console.log(`Total valid streams found across all addons: ${totalStreams}`);
-    
-    if (totalStreams === 0) {
-      console.log('No streams found. This could be because:', [
-        '- The content is not available in any installed addon',
-        '- The content ID format is not supported',
-        '- The addons are not responding correctly',
-        '- You need to install more streaming addons'
-      ].join('\n'));
     }
 
     return responses;
+  }
+
+  private async fetchStreamsFromAddon(addon: Manifest, type: string, id: string): Promise<StreamResponse | null> {
+    try {
+      const baseUrl = addon.url;
+      const queryParams = addon.queryParams || '';
+
+      if (!baseUrl) {
+        console.error(`No URL found for addon ${addon.name} (${addon.id})`);
+        return null;
+      }
+
+      const streamUrl = `${baseUrl}/stream/${type}/${id}.json${queryParams}`;
+      
+      const response = await this.retryRequest(() => axios.get<StreamResponse>(streamUrl));
+      
+      if (!response.data.streams?.length) {
+        return null;
+      }
+
+      const processedStreams = this.processStreams(response.data.streams, addon);
+      
+      return processedStreams.length > 0 ? { streams: processedStreams } : null;
+
+    } catch (error) {
+      console.error(`Error fetching streams from ${addon.name}:`, error);
+      return null;
+    }
+  }
+
+  private processStreams(streams: any[], addon: Manifest): Stream[] {
+    return streams
+      .filter(stream => {
+        const isTorrentioStream = stream.infoHash && stream.fileIdx !== undefined;
+        return stream && (stream.url || isTorrentioStream) && (stream.title || stream.name);
+      })
+      .map(stream => {
+        const isDirectStreamingUrl = this.isDirectStreamingUrl(stream.url);
+        const isRealDebridCached = this.isRealDebridCachedStream(stream, addon);
+        const streamUrl = this.getStreamUrl(stream);
+        const isMagnetStream = streamUrl?.startsWith('magnet:');
+
+        // Keep original stream data exactly as provided by the addon
+        return {
+          ...stream,
+          url: streamUrl,
+          addonName: addon.name,
+          addonId: addon.id,
+          // For Torrentio, name contains the full formatted title with [RD+]
+          // For MediaFusion, title contains addon info and name contains file info
+          name: stream.name,
+          title: stream.title,
+          behaviorHints: {
+            ...stream.behaviorHints,
+            notWebReady: !isDirectStreamingUrl,
+            isMagnetStream,
+            isRealDebridCached,
+            cached: isRealDebridCached,
+            ...(isMagnetStream && {
+              infoHash: stream.infoHash || streamUrl?.match(/btih:([a-zA-Z0-9]+)/)?.[1],
+              fileIdx: stream.fileIdx,
+              magnetUrl: streamUrl,
+              type: 'torrent',
+              sources: stream.sources || [],
+              seeders: stream.seeders,
+              size: stream.size,
+              title: stream.title,
+            })
+          }
+        };
+      });
+  }
+
+  private isDirectStreamingUrl(url?: string): boolean {
+    return Boolean(
+      url && (
+        url.startsWith('http') || 
+        url.startsWith('https') ||
+        url.includes('real-debrid.com') ||
+        url.includes('debrid')
+      )
+    );
+  }
+
+  private isRealDebridCachedStream(stream: any, addon: Manifest): boolean {
+    return Boolean(
+      (addon.id === 'com.stremio.torrentio.addon' && 
+       addon.originalUrl?.includes('torrentio.strem.fun')) &&
+      (this.isDirectStreamingUrl(stream.url) || stream.behaviorHints?.cached) &&
+      stream.infoHash &&
+      (stream.title?.toLowerCase().includes('[rd+]') || 
+       stream.title?.toLowerCase().includes('[rd]') || 
+       stream.title?.toLowerCase().includes('rd+') ||
+       (stream.title?.toLowerCase().includes('cached') && 
+        stream.title?.toLowerCase().includes('rd')))
+    );
+  }
+
+  private getStreamUrl(stream: any): string {
+    if (stream.url) return stream.url;
+    
+    if (stream.infoHash) {
+      const trackers = [
+        'udp://tracker.opentrackr.org:1337/announce',
+        'udp://9.rarbg.com:2810/announce',
+        'udp://tracker.openbittorrent.com:6969/announce',
+        'udp://tracker.torrent.eu.org:451/announce',
+        'udp://open.stealth.si:80/announce',
+        'udp://tracker.leechers-paradise.org:6969/announce',
+        'udp://tracker.coppersurfer.tk:6969/announce',
+        'udp://tracker.internetwarriors.net:1337/announce'
+      ];
+      const trackersString = trackers.map(t => `&tr=${encodeURIComponent(t)}`).join('');
+      const encodedTitle = encodeURIComponent(stream.title || stream.name || 'Unknown');
+      return `magnet:?xt=urn:btih:${stream.infoHash}&dn=${encodedTitle}${trackersString}`;
+    }
+
+    return '';
   }
 
   async getCatalog(addonId: string, type: string, id: string, options: CatalogOptions = {}): Promise<Meta[]> {
@@ -401,6 +471,135 @@ class StremioService {
     } catch (error) {
       console.error('Error fetching catalog:', error);
       throw error;
+    }
+  }
+
+  getAddonCapabilities(): AddonCapabilities[] {
+    return Array.from(this.installedAddons.values()).map(addon => ({
+      name: addon.name,
+      id: addon.id,
+      version: addon.version,
+      catalogs: addon.catalogs || [],
+      resources: addon.resources || [],
+      types: addon.types || []
+    }));
+  }
+
+  async getCatalogPreview(addonId: string, type: string, id: string, limit: number = 5): Promise<{
+    addon: string;
+    type: string;
+    id: string;
+    items: Meta[];
+  }> {
+    try {
+      const items = await this.getCatalog(addonId, type, id, { limit });
+      return {
+        addon: this.installedAddons.get(addonId)?.name || addonId,
+        type,
+        id,
+        items
+      };
+    } catch (error) {
+      console.error(`Error fetching catalog preview for ${addonId}:`, error);
+      return {
+        addon: addonId,
+        type,
+        id,
+        items: []
+      };
+    }
+  }
+
+  async getAllAddonMetadataExamples(): Promise<{
+    [addonId: string]: {
+      name: string;
+      catalogs: {
+        type: string;
+        id: string;
+        name: string;
+        examples: Meta[];
+      }[];
+    }
+  }> {
+    const results: {
+      [addonId: string]: {
+        name: string;
+        catalogs: {
+          type: string;
+          id: string;
+          name: string;
+          examples: Meta[];
+        }[];
+      }
+    } = {};
+
+    const addons = Array.from(this.installedAddons.values());
+
+    for (const addon of addons) {
+      if (!addon.catalogs || addon.catalogs.length === 0) continue;
+
+      results[addon.id] = {
+        name: addon.name,
+        catalogs: []
+      };
+
+      for (const catalog of addon.catalogs) {
+        try {
+          console.log(`Fetching example items from ${addon.name} catalog: ${catalog.type}/${catalog.id}`);
+          const items = await this.getCatalog(addon.id, catalog.type, catalog.id, { limit: 5 });
+          
+          results[addon.id].catalogs.push({
+            type: catalog.type,
+            id: catalog.id,
+            name: catalog.name,
+            examples: items
+          });
+        } catch (error) {
+          console.error(`Error fetching examples from ${addon.name} catalog:`, error);
+          results[addon.id].catalogs.push({
+            type: catalog.type,
+            id: catalog.id,
+            name: catalog.name,
+            examples: []
+          });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  async previewAddon(url: string): Promise<{
+    name: string;
+    version: string;
+    description: string;
+    types: string[];
+    catalogs: {
+      type: string;
+      id: string;
+      name: string;
+    }[];
+    resources: {
+      name: string;
+      types: string[];
+      idPrefixes?: string[];
+    }[];
+  }> {
+    try {
+      console.log('Fetching addon manifest from:', url);
+      const manifest = await this.retryRequest(() => this.getManifest(url));
+      
+      return {
+        name: manifest.name,
+        version: manifest.version,
+        description: manifest.description,
+        types: manifest.types || [],
+        catalogs: manifest.catalogs || [],
+        resources: manifest.resources || []
+      };
+    } catch (error) {
+      console.error('Error previewing addon:', error);
+      throw new Error('Failed to preview addon. Please check the URL and try again.');
     }
   }
 }

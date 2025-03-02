@@ -35,6 +35,7 @@ interface Stream {
     behaviorHints?: {
         notWebReady?: boolean;
         headers?: Record<string, string>;
+        isRealDebridCached?: boolean;
     };
     addonId?: string;
     addonName?: string;
@@ -443,6 +444,19 @@ const MetadataDialog = () => {
         return null;
     };
 
+    const isRealDebridCached = (stream: Stream) => {
+        // First check behaviorHints
+        if (stream.behaviorHints?.isRealDebridCached) {
+            return true;
+        }
+        // Fallback to title check
+        const streamTitle = (stream.title || stream.name || '').toLowerCase();
+        return streamTitle.includes('[rd+]') || 
+               streamTitle.includes('[rd]') || 
+               streamTitle.includes('rd+') ||
+               (streamTitle.includes('cached') && streamTitle.includes('rd'));
+    };
+
     const QualityChip = ({ icon, label, color = 'primary' }: { icon: React.ReactNode; label: string | null; color?: 'primary' | 'secondary' | 'warning' }) => {
         if (!label) return null;
         return (
@@ -496,6 +510,11 @@ const MetadataDialog = () => {
         const source = getStreamSourceInfo(stream);
         const size = stream.title?.match(/💾\s*([\d.]+\s*[GM]B)/)?.[1] || '';
         
+        // Format the stream title to include RD+ prefix if needed
+        const displayTitle = stream.addonId === 'com.stremio.torrentio.addon' ? 
+            stream.title || stream.name || 'Unnamed Stream' :
+            stream.name || stream.title || 'Unnamed Stream';
+        
         return (
             <Box 
                 sx={{
@@ -535,13 +554,33 @@ const MetadataDialog = () => {
                             fontSize: '1.1rem',
                             mb: 2,
                             lineHeight: 1.4,
-                            flexGrow: 1
+                            flexGrow: 1,
+                            ...(stream.addonId === 'com.stremio.torrentio.addon' ? {
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                                fontFamily: 'monospace'
+                            } : {
+                                whiteSpace: 'normal',
+                                wordBreak: 'break-word'
+                            })
                         }}
                     >
-                        {stream.title || stream.name || 'Unnamed Stream'}
+                        {displayTitle}
                     </Typography>
                     
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3 }}>
+                        {isRealDebridCached(stream) && (
+                            <Chip
+                                label="RD+"
+                                size="small"
+                                sx={{
+                                    bgcolor: alpha('#388e3c', 0.2),
+                                    color: '#4caf50',
+                                    fontWeight: 'bold',
+                                    border: '1px solid rgba(76, 175, 80, 0.3)'
+                                }}
+                            />
+                        )}
                         {quality && (
                             <Chip
                                 label={quality}
@@ -1016,13 +1055,29 @@ const MetadataDialog = () => {
                                                                 sx={{ 
                                                                     color: '#fff',
                                                                     fontWeight: 600,
-                                                                    mb: 1
+                                                                    mb: 1,
+                                                                    lineHeight: 1.4,
+                                                                    whiteSpace: 'pre-wrap',
+                                                                    wordBreak: 'break-word',
+                                                                    fontFamily: stream.addonId === 'com.stremio.torrentio.addon' ? 'monospace' : 'inherit'
                                                                 }}
                                                             >
                                                                 {stream.title || stream.name || 'Unnamed Stream'}
                                                             </Typography>
                                                             
                                                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                                                {isRealDebridCached(stream) && (
+                                                                    <Chip
+                                                                        label="RD+"
+                                                                        size="small"
+                                                                        sx={{
+                                                                            bgcolor: alpha('#388e3c', 0.2),
+                                                                            color: '#4caf50',
+                                                                            fontWeight: 'bold',
+                                                                            border: '1px solid rgba(76, 175, 80, 0.3)'
+                                                                        }}
+                                                                    />
+                                                                )}
                                                                 {quality && (
                                                                     <QualityChip 
                                                                         icon={<FourKIcon sx={{ fontSize: '1rem' }} />}
@@ -1125,6 +1180,542 @@ const MetadataDialog = () => {
         );
     };
 
+    const renderTabs = () => {
+        const itemTabStyles = {
+            fontSize: { xs: '0.9rem', sm: '1rem' },
+            minWidth: 'auto',
+            py: 1.5,
+            px: { xs: 2, sm: 3 },
+            fontWeight: 600,
+            textTransform: 'none',
+            color: 'text.secondary',
+            '&.Mui-selected': {
+                color: 'text.primary',
+                fontWeight: 700
+            }
+        };
+
+        console.log('metadata.cast:', metadata.cast);
+        const castList = Array.isArray(metadata.cast) ? metadata.cast.join(', ') : 'No cast available';
+
+        return (
+            <Box 
+                sx={{ 
+                    minHeight: '100vh',
+                    background: 'linear-gradient(135deg, #000000 0%, #000000 100%)',
+                    position: 'relative',
+                    pb: 8
+                }}
+            >
+                {/* Hero Section with Parallax Effect */}
+                <Box 
+                    sx={{ 
+                        position: 'relative',
+                        height: { xs: '100vh', md: '75vh' },
+                        width: '100%',
+                        overflow: 'hidden',
+                        mb: 6
+                    }}
+                >
+                    <Fade in timeout={1000}>
+                        <Box
+                            sx={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                backgroundImage: `url(${metadata.background || metadata.poster})`,
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center',
+                                filter: 'brightness(0.7)',
+                                transform: 'scale(1.1)',
+                                transition: 'transform 0.5s ease-out',
+                                '&::before': {
+                                    content: '""',
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    background: `linear-gradient(0deg, 
+                                        rgba(0, 0, 0, 0.95) 0%,
+                                        rgba(0, 0, 0, 0.8) 50%,
+                                        rgba(0, 0, 0, 0.4) 100%
+                                    )`
+                                }
+                            }}
+                        />
+                    </Fade>
+
+                    {/* Floating action buttons with glass effect */}
+                    <Box
+                        sx={{
+                            position: 'absolute',
+                            top: 20,
+                            left: 20,
+                            zIndex: 10,
+                            display: 'flex',
+                            gap: 2
+                        }}
+                    >
+                        <IconButton
+                            onClick={() => navigate(-1)}
+                            sx={{
+                                bgcolor: alpha('#fff', 0.1),
+                                backdropFilter: 'blur(10px)',
+                                '&:hover': {
+                                    bgcolor: alpha('#fff', 0.2),
+                                    transform: 'scale(1.1)'
+                                },
+                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                width: 48,
+                                height: 48
+                            }}
+                        >
+                            <ArrowBackIcon />
+                        </IconButton>
+                    </Box>
+
+                    <Container 
+                        maxWidth={false}
+                        sx={{ 
+                            height: '100%',
+                            position: 'relative',
+                            zIndex: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            px: { xs: 2, sm: 4, md: 8 }
+                        }}
+                    >
+                        <Grid container spacing={6} alignItems="center">
+                            <Grid item xs={12} md={4} lg={3}>
+                                <Fade in timeout={1000}>
+                                    <Box
+                                        sx={{
+                                            position: 'relative',
+                                            width: '100%',
+                                            maxWidth: { xs: 300, md: '100%' },
+                                            margin: '0 auto',
+                                            paddingTop: '150%',
+                                            borderRadius: 4,
+                                            overflow: 'hidden',
+                                            boxShadow: '0 20px 80px rgba(0,0,0,0.6)',
+                                            transform: 'perspective(1000px) rotateY(-5deg)',
+                                            transition: 'all 0.5s ease',
+                                            '&:hover': {
+                                                transform: 'perspective(1000px) rotateY(0deg) translateY(-10px)',
+                                            }
+                                        }}
+                                    >
+                                        <img
+                                            src={metadata.poster}
+                                            alt={metadata.name}
+                                            style={{
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover'
+                                            }}
+                                        />
+                                    </Box>
+                                </Fade>
+                            </Grid>
+                            <Grid item xs={12} md={8} lg={9}>
+                                <Fade in timeout={1000}>
+                                    <Box>
+                                        {metadata.genres && (
+                                            <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
+                                                {metadata.genres.slice(0, 4).map((genre: string) => (
+                                                    <Chip
+                                                        key={genre}
+                                                        label={genre}
+                                                        sx={{
+                                                            bgcolor: alpha('#fff', 0.1),
+                                                            color: '#fff',
+                                                            fontWeight: 600,
+                                                            borderRadius: 1,
+                                                            px: 1.5
+                                                        }}
+                                                    />
+                                                ))}
+                                            </Box>
+                                        )}
+
+                                        {metadata.logo ? (
+                                            <Box
+                                                component="img"
+                                                src={metadata.logo}
+                                                alt={metadata.name}
+                                                sx={{
+                                                    mb: 2,
+                                                    maxWidth: '100%',
+                                                    height: 'auto',
+                                                    maxHeight: '120px',
+                                                    objectFit: 'contain',
+                                                    filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+                                                    transition: 'all 0.3s ease',
+                                                }}
+                                            />
+                                        ) : (
+                                            <Typography 
+                                                variant="h1" 
+                                                sx={{ 
+                                                    mb: 3,
+                                                    fontWeight: 900,
+                                                    fontSize: { xs: '2.75rem', sm: '3.75rem', md: '4.5rem' },
+                                                    background: 'linear-gradient(to right, #14b8a6 0%, rgba(20, 184, 166, 0.85) 100%)',
+                                                    WebkitBackgroundClip: 'text',
+                                                    WebkitTextFillColor: 'transparent',
+                                                    letterSpacing: '-0.02em',
+                                                    lineHeight: 1,
+                                                    textShadow: '0 2px 4px rgba(0,0,0,0.4)',
+                                                    fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                                                }}
+                                            >
+                                                {metadata.name}
+                                            </Typography>
+                                        )}
+
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 4, alignItems: 'center' }}>
+                                            {metadata.releaseInfo && (
+                                                <Typography 
+                                                    sx={{ 
+                                                        color: alpha('#fff', 0.9),
+                                                        fontSize: '1.1rem',
+                                                        fontWeight: 600,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: 1
+                                                    }}
+                                                >
+                                                    <span style={{ color: theme.palette.primary.main }}>•</span> {metadata.releaseInfo}
+                                                </Typography>
+                                            )}
+                                            {metadata.runtime && (
+                                                <Typography 
+                                                    sx={{ 
+                                                        color: alpha('#fff', 0.9),
+                                                        fontSize: '1.1rem',
+                                                        fontWeight: 500,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: 1
+                                                    }}
+                                                >
+                                                    <span style={{ color: theme.palette.primary.main }}>•</span> {metadata.runtime}
+                                                </Typography>
+                                            )}
+                                            {metadata.imdbRating && (
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <Rating
+                                                        value={parseFloat(metadata.imdbRating) / 2}
+                                                        precision={0.1}
+                                                        readOnly
+                                                        sx={{
+                                                            '& .MuiRating-iconFilled': {
+                                                                color: '#f5c518'
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Typography 
+                                                        sx={{ 
+                                                            color: '#f5c518',
+                                                            fontWeight: 700,
+                                                            fontSize: '1.1rem'
+                                                        }}
+                                                    >
+                                                        {metadata.imdbRating}
+                                                    </Typography>
+                                                </Box>
+                                            )}
+                                        </Box>
+
+                                        {metadata.description && (
+                                            <Typography 
+                                                sx={{ 
+                                                    color: alpha('#fff', 0.9),
+                                                    fontSize: '1.1rem',
+                                                    lineHeight: 1.7,
+                                                    mb: 4,
+                                                    maxWidth: '90%',
+                                                    textShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                                                }}
+                                            >
+                                                {metadata.description}
+                                            </Typography>
+                                        )}
+
+                                        {/* People & Credits - horizontal scroll */}
+                                        <Box sx={{ mb: 2 }}>
+                                            {(metadata.cast || metadata.director) && (
+                                                <Box
+                                                    sx={{
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: 2,
+                                                        pb: 2
+                                                    }}
+                                                >
+                                                    {metadata.director && (
+                                                        <Box>
+                                                            <Typography 
+                                                                sx={{ 
+                                                                    color: alpha('#fff', 0.7),
+                                                                    mb: 0.5,
+                                                                    fontWeight: 600,
+                                                                    fontSize: '0.9rem',
+                                                                    textTransform: 'uppercase',
+                                                                    letterSpacing: 1
+                                                                }}
+                                                            >
+                                                                Director
+                                                            </Typography>
+                                                            <Typography 
+                                                                sx={{ 
+                                                                    color: '#fff',
+                                                                    fontSize: '1.1rem',
+                                                                    fontWeight: 500
+                                                                }}
+                                                            >
+                                                                {metadata.director}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                    
+                                                    {metadata.cast && (
+                                                        <Box>
+                                                            <Typography 
+                                                                sx={{ 
+                                                                    color: alpha('#fff', 0.7),
+                                                                    mb: 0.5,
+                                                                    fontWeight: 600,
+                                                                    fontSize: '0.9rem',
+                                                                    textTransform: 'uppercase',
+                                                                    letterSpacing: 1
+                                                                }}
+                                                            >
+                                                                Cast
+                                                            </Typography>
+                                                            <Typography 
+                                                                sx={{ 
+                                                                    color: '#fff',
+                                                                    fontSize: '1.1rem',
+                                                                    fontWeight: 500
+                                                                }}
+                                                            >
+                                                                {castList}
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                            )}
+                                        </Box>
+                                    </Box>
+                                </Fade>
+                            </Grid>
+                        </Grid>
+                    </Container>
+                </Box>
+
+                {/* Content Container with Glass Effect */}
+                <Container 
+                    maxWidth="xl" 
+                    sx={{
+                        position: 'relative',
+                        zIndex: 2,
+                        px: { xs: 2, sm: 3, md: 4 }
+                    }}
+                >
+                    {/* Episodes Section */}
+                    {type === 'series' && (
+                        <Box 
+                            sx={{ 
+                                mb: 6,
+                                p: { xs: 2, sm: 3, md: 4 },
+                                borderRadius: { xs: 2, sm: 3, md: 4 },
+                                bgcolor: alpha('#fff', 0.03),
+                                backdropFilter: 'blur(20px)',
+                                border: `1px solid ${alpha('#fff', 0.1)}`
+                            }}
+                        >
+                            {renderSeasonSelector()}
+                        </Box>
+                    )}
+                    
+                    {/* Streams Section */}
+                    <Box sx={{ mb: 8, width: '100%' }}>
+                        <Typography 
+                            variant="h4" 
+                            sx={{ 
+                                mb: 1,
+                                fontWeight: 800,
+                                fontSize: { xs: '1.5rem', sm: '1.8rem', md: '2.2rem' },
+                                color: '#fff',
+                                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                            }}
+                        >
+                            {type === 'series' ? (
+                                <>
+                                    Season {selectedSeason} Episode {selectedEpisode}
+                                </>
+                            ) : 'Available Streams'}
+                        </Typography>
+                        
+                        <Typography 
+                            sx={{ 
+                                color: alpha('#fff', 0.7),
+                                mb: { xs: 3, sm: 4 },
+                                fontSize: { xs: '1rem', sm: '1.1rem' }
+                            }}
+                        >
+                            Choose a stream to start watching
+                        </Typography>
+
+                        {type === 'series' ? (
+                            renderStreamPanel()
+                        ) : (
+                            <Box>
+                                {loadingStreams ? (
+                                    <Box 
+                                        display="flex" 
+                                        justifyContent="center" 
+                                        alignItems="center" 
+                                        flexDirection="column"
+                                        gap={3}
+                                        sx={{ height: '100%', py: 8 }}
+                                    >
+                                        <CircularProgress />
+                                        <Typography sx={{ color: alpha('#fff', 0.7) }}>
+                                            Loading available streams...
+                                        </Typography>
+                                    </Box>
+                                ) : Object.keys(groupedStreams).length > 0 ? (
+                                    <Box>
+                                        {Object.entries(groupedStreams).map(([addonId, { addonName, streams }]) => (
+                                            <Box key={addonId} sx={{ mb: 4 }}>
+                                                <Box sx={{ 
+                                                    display: 'flex', 
+                                                    alignItems: 'center',
+                                                    mb: 2
+                                                }}>
+                                                    <Box
+                                                        sx={{
+                                                            width: 4,
+                                                            height: 20,
+                                                            background: 'linear-gradient(180deg, #14b8a6, #0d9488)',
+                                                            borderRadius: 1,
+                                                            mr: 2
+                                                        }}
+                                                    />
+                                                    <Typography 
+                                                        variant="h6" 
+                                                        sx={{ 
+                                                            fontWeight: 600,
+                                                            color: '#fff'
+                                                        }}
+                                                    >
+                                                        {addonName}
+                                                    </Typography>
+                                                </Box>
+
+                                                <Grid container spacing={2}>
+                                                    {streams.map((stream) => (
+                                                        <Grid item xs={12} sm={6} md={4} key={stream.url}>
+                                                            {renderStreamCard(stream)}
+                                                        </Grid>
+                                                    ))}
+                                                </Grid>
+                                            </Box>
+                                        ))}
+                                    </Box>
+                                ) : (
+                                    <Box 
+                                        sx={{ 
+                                            height: '100%',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: 2,
+                                            p: 4,
+                                            textAlign: 'center'
+                                        }}
+                                    >
+                                        <Box
+                                            sx={{
+                                                width: 80,
+                                                height: 80,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                borderRadius: '50%',
+                                                bgcolor: alpha('#fff', 0.08),
+                                                mb: 2
+                                            }}
+                                        >
+                                            <Typography
+                                                sx={{
+                                                    fontSize: '2.5rem',
+                                                    color: alpha('#fff', 0.5)
+                                                }}
+                                            >
+                                                📺
+                                            </Typography>
+                                        </Box>
+                                        <Typography 
+                                            variant="h6"
+                                            sx={{ 
+                                                color: '#fff',
+                                                fontWeight: 600,
+                                                mb: 1
+                                            }}
+                                        >
+                                            No Streams Found
+                                        </Typography>
+                                        <Typography 
+                                            sx={{ 
+                                                color: alpha('#fff', 0.7),
+                                                fontSize: '1.1rem'
+                                            }}
+                                        >
+                                            No streams available for this content. Make sure you have streaming addons installed.
+                                        </Typography>
+                                    </Box>
+                                )}
+                            </Box>
+                        )}
+                    </Box>
+                </Container>
+
+                {/* Simple Footer */}
+                <Box
+                    sx={{
+                        bgcolor: alpha('#000', 0.3),
+                        py: 3,
+                        borderTop: `1px solid ${alpha('#fff', 0.05)}`,
+                        position: 'relative',
+                        mt: 'auto'
+                    }}
+                >
+                    <Container maxWidth="xl">
+                        <Typography
+                            sx={{
+                                color: alpha('#fff', 0.6),
+                                textAlign: 'center',
+                                fontSize: '0.9rem'
+                            }}
+                        >
+                            Powered by Stremio • Unofficial Web Player
+                        </Typography>
+                    </Container>
+                </Box>
+            </Box>
+        );
+    };
+
     if (loading) {
         return (
             <Box 
@@ -1158,524 +1749,8 @@ const MetadataDialog = () => {
     }
 
     console.log('metadata.cast:', metadata.cast);
-    const castList = Array.isArray(metadata.cast) ? metadata.cast.join(', ') : 'No cast available';
 
-    return (
-        <Box 
-            sx={{ 
-                minHeight: '100vh',
-                background: 'linear-gradient(135deg, #000000 0%, #000000 100%)',
-                position: 'relative',
-                pb: 8
-            }}
-        >
-            {/* Hero Section with Parallax Effect */}
-            <Box 
-                sx={{ 
-                    position: 'relative',
-                    height: { xs: '100vh', md: '75vh' },
-                    width: '100%',
-                    overflow: 'hidden',
-                    mb: 6
-                }}
-            >
-                <Fade in timeout={1000}>
-                    <Box
-                        sx={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundImage: `url(${metadata.background || metadata.poster})`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center',
-                            filter: 'brightness(0.7)',
-                            transform: 'scale(1.1)',
-                            transition: 'transform 0.5s ease-out',
-                            '&::before': {
-                                content: '""',
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                background: `linear-gradient(0deg, 
-                                    rgba(0, 0, 0, 0.95) 0%,
-                                    rgba(0, 0, 0, 0.8) 50%,
-                                    rgba(0, 0, 0, 0.4) 100%
-                                )`
-                            }
-                        }}
-                    />
-                </Fade>
-
-                {/* Floating action buttons with glass effect */}
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        top: 20,
-                        left: 20,
-                        zIndex: 10,
-                        display: 'flex',
-                        gap: 2
-                    }}
-                >
-                    <IconButton
-                        onClick={() => navigate(-1)}
-                        sx={{
-                            bgcolor: alpha('#fff', 0.1),
-                            backdropFilter: 'blur(10px)',
-                            '&:hover': {
-                                bgcolor: alpha('#fff', 0.2),
-                                transform: 'scale(1.1)'
-                            },
-                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                            width: 48,
-                            height: 48
-                        }}
-                    >
-                        <ArrowBackIcon />
-                    </IconButton>
-                </Box>
-
-                <Container 
-                    maxWidth={false}
-                    sx={{ 
-                        height: '100%',
-                        position: 'relative',
-                        zIndex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        px: { xs: 2, sm: 4, md: 8 }
-                    }}
-                >
-                    <Grid container spacing={6} alignItems="center">
-                        <Grid item xs={12} md={4} lg={3}>
-                            <Fade in timeout={1000}>
-                                <Box
-                                    sx={{
-                                        position: 'relative',
-                                        width: '100%',
-                                        maxWidth: { xs: 300, md: '100%' },
-                                        margin: '0 auto',
-                                        paddingTop: '150%',
-                                        borderRadius: 4,
-                                        overflow: 'hidden',
-                                        boxShadow: '0 20px 80px rgba(0,0,0,0.6)',
-                                        transform: 'perspective(1000px) rotateY(-5deg)',
-                                        transition: 'all 0.5s ease',
-                                        '&:hover': {
-                                            transform: 'perspective(1000px) rotateY(0deg) translateY(-10px)',
-                                        }
-                                    }}
-                                >
-                                    <img
-                                        src={metadata.poster}
-                                        alt={metadata.name}
-                                        style={{
-                                            position: 'absolute',
-                                            top: 0,
-                                            left: 0,
-                                            width: '100%',
-                                            height: '100%',
-                                            objectFit: 'cover'
-                                        }}
-                                    />
-                                </Box>
-                            </Fade>
-                        </Grid>
-                        <Grid item xs={12} md={8} lg={9}>
-                            <Fade in timeout={1000}>
-                                <Box>
-                                    {metadata.genres && (
-                                        <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
-                                            {metadata.genres.slice(0, 4).map((genre: string) => (
-                                                <Chip
-                                                    key={genre}
-                                                    label={genre}
-                                                    sx={{
-                                                        bgcolor: alpha('#fff', 0.1),
-                                                        color: '#fff',
-                                                        fontWeight: 600,
-                                                        borderRadius: 1,
-                                                        px: 1.5
-                                                    }}
-                                                />
-                                            ))}
-                                        </Box>
-                                    )}
-
-                                    {metadata.logo ? (
-                                        <Box
-                                            component="img"
-                                            src={metadata.logo}
-                                            alt={metadata.name}
-                                            sx={{
-                                                mb: 2,
-                                                maxWidth: '100%',
-                                                height: 'auto',
-                                                maxHeight: '120px',
-                                                objectFit: 'contain',
-                                                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
-                                                transition: 'all 0.3s ease',
-                                            }}
-                                        />
-                                    ) : (
-                                        <Typography 
-                                            variant="h1" 
-                                            sx={{ 
-                                                mb: 3,
-                                                fontWeight: 900,
-                                                fontSize: { xs: '2.75rem', sm: '3.75rem', md: '4.5rem' },
-                                                background: 'linear-gradient(to right, #14b8a6 0%, rgba(20, 184, 166, 0.85) 100%)',
-                                                WebkitBackgroundClip: 'text',
-                                                WebkitTextFillColor: 'transparent',
-                                                letterSpacing: '-0.02em',
-                                                lineHeight: 1,
-                                                textShadow: '0 2px 4px rgba(0,0,0,0.4)',
-                                                fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-                                            }}
-                                        >
-                                            {metadata.name}
-                                        </Typography>
-                                    )}
-
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 4, alignItems: 'center' }}>
-                                        {metadata.releaseInfo && (
-                                            <Typography 
-                                                sx={{ 
-                                                    color: alpha('#fff', 0.9),
-                                                    fontSize: '1.1rem',
-                                                    fontWeight: 600,
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: 1
-                                                }}
-                                            >
-                                                <span style={{ color: theme.palette.primary.main }}>•</span> {metadata.releaseInfo}
-                                            </Typography>
-                                        )}
-                                        {metadata.runtime && (
-                                            <Typography 
-                                                sx={{ 
-                                                    color: alpha('#fff', 0.9),
-                                                    fontSize: '1.1rem',
-                                                    fontWeight: 500,
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: 1
-                                                }}
-                                            >
-                                                <span style={{ color: theme.palette.primary.main }}>•</span> {metadata.runtime}
-                                            </Typography>
-                                        )}
-                                        {metadata.imdbRating && (
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <Rating
-                                                    value={parseFloat(metadata.imdbRating) / 2}
-                                                    precision={0.1}
-                                                    readOnly
-                                                    sx={{
-                                                        '& .MuiRating-iconFilled': {
-                                                            color: '#f5c518'
-                                                        }
-                                                    }}
-                                                />
-                                                <Typography 
-                                                    sx={{ 
-                                                        color: '#f5c518',
-                                                        fontWeight: 700,
-                                                        fontSize: '1.1rem'
-                                                    }}
-                                                >
-                                                    {metadata.imdbRating}
-                                                </Typography>
-                                            </Box>
-                                        )}
-                                    </Box>
-
-                                    {metadata.description && (
-                                        <Typography 
-                                            sx={{ 
-                                                color: alpha('#fff', 0.9),
-                                                fontSize: '1.1rem',
-                                                lineHeight: 1.7,
-                                                mb: 4,
-                                                maxWidth: '90%',
-                                                textShadow: '0 1px 3px rgba(0,0,0,0.3)'
-                                            }}
-                                        >
-                                            {metadata.description}
-                                        </Typography>
-                                    )}
-
-                                    {/* People & Credits - horizontal scroll */}
-                                    <Box sx={{ mb: 2 }}>
-                                        {(metadata.cast || metadata.director) && (
-                                            <Box
-                                                sx={{
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    gap: 2,
-                                                    pb: 2
-                                                }}
-                                            >
-                                                {metadata.director && (
-                                                    <Box>
-                                                        <Typography 
-                                                            sx={{ 
-                                                                color: alpha('#fff', 0.7),
-                                                                mb: 0.5,
-                                                                fontWeight: 600,
-                                                                fontSize: '0.9rem',
-                                                                textTransform: 'uppercase',
-                                                                letterSpacing: 1
-                                                            }}
-                                                        >
-                                                            Director
-                                                        </Typography>
-                                                        <Typography 
-                                                            sx={{ 
-                                                                color: '#fff',
-                                                                fontSize: '1.1rem',
-                                                                fontWeight: 500
-                                                            }}
-                                                        >
-                                                            {metadata.director}
-                                                        </Typography>
-                                                    </Box>
-                                                )}
-                                                
-                                                {metadata.cast && (
-                                                    <Box>
-                                                        <Typography 
-                                                            sx={{ 
-                                                                color: alpha('#fff', 0.7),
-                                                                mb: 0.5,
-                                                                fontWeight: 600,
-                                                                fontSize: '0.9rem',
-                                                                textTransform: 'uppercase',
-                                                                letterSpacing: 1
-                                                            }}
-                                                        >
-                                                            Cast
-                                                        </Typography>
-                                                        <Typography 
-                                                            sx={{ 
-                                                                color: '#fff',
-                                                                fontSize: '1.1rem',
-                                                                fontWeight: 500
-                                                            }}
-                                                        >
-                                                            {castList}
-                                                        </Typography>
-                                                    </Box>
-                                                )}
-                                            </Box>
-                                        )}
-                                    </Box>
-                                </Box>
-                            </Fade>
-                        </Grid>
-                    </Grid>
-                </Container>
-            </Box>
-
-            {/* Content Container with Glass Effect */}
-            <Container 
-                maxWidth="xl" 
-                sx={{
-                    position: 'relative',
-                    zIndex: 2,
-                    px: { xs: 2, sm: 3, md: 4 }
-                }}
-            >
-                {/* Episodes Section */}
-                {type === 'series' && (
-                    <Box 
-                        sx={{ 
-                            mb: 6,
-                            p: { xs: 2, sm: 3, md: 4 },
-                            borderRadius: { xs: 2, sm: 3, md: 4 },
-                            bgcolor: alpha('#fff', 0.03),
-                            backdropFilter: 'blur(20px)',
-                            border: `1px solid ${alpha('#fff', 0.1)}`
-                        }}
-                    >
-                        {renderSeasonSelector()}
-                    </Box>
-                )}
-                
-                {/* Streams Section */}
-                <Box sx={{ mb: 8, width: '100%' }}>
-                    <Typography 
-                        variant="h4" 
-                        sx={{ 
-                            mb: 1,
-                            fontWeight: 800,
-                            fontSize: { xs: '1.5rem', sm: '1.8rem', md: '2.2rem' },
-                            color: '#fff',
-                            textShadow: '0 2px 4px rgba(0,0,0,0.3)'
-                        }}
-                    >
-                        {type === 'series' ? (
-                            <>
-                                Season {selectedSeason} Episode {selectedEpisode}
-                            </>
-                        ) : 'Available Streams'}
-                    </Typography>
-                    
-                    <Typography 
-                        sx={{ 
-                            color: alpha('#fff', 0.7),
-                            mb: { xs: 3, sm: 4 },
-                            fontSize: { xs: '1rem', sm: '1.1rem' }
-                        }}
-                    >
-                        Choose a stream to start watching
-                    </Typography>
-
-                    {type === 'series' ? (
-                        renderStreamPanel()
-                    ) : (
-                        <Box>
-                            {loadingStreams ? (
-                                <Box 
-                                    display="flex" 
-                                    justifyContent="center" 
-                                    alignItems="center" 
-                                    flexDirection="column"
-                                    gap={3}
-                                    sx={{ height: '100%', py: 8 }}
-                                >
-                                    <CircularProgress />
-                                    <Typography sx={{ color: alpha('#fff', 0.7) }}>
-                                        Loading available streams...
-                                    </Typography>
-                                </Box>
-                            ) : Object.keys(groupedStreams).length > 0 ? (
-                                <Box>
-                                    {Object.entries(groupedStreams).map(([addonId, { addonName, streams }]) => (
-                                        <Box key={addonId} sx={{ mb: 4 }}>
-                                            <Box sx={{ 
-                                                display: 'flex', 
-                                                alignItems: 'center',
-                                                mb: 2
-                                            }}>
-                                                <Box
-                                                    sx={{
-                                                        width: 4,
-                                                        height: 20,
-                                                        background: 'linear-gradient(180deg, #14b8a6, #0d9488)',
-                                                        borderRadius: 1,
-                                                        mr: 2
-                                                    }}
-                                                />
-                                                <Typography 
-                                                    variant="h6" 
-                                                    sx={{ 
-                                                        fontWeight: 600,
-                                                        color: '#fff'
-                                                    }}
-                                                >
-                                                    {addonName}
-                                                </Typography>
-                                            </Box>
-
-                                            <Grid container spacing={2}>
-                                                {streams.map((stream) => (
-                                                    <Grid item xs={12} sm={6} md={4} key={stream.url}>
-                                                        {renderStreamCard(stream)}
-                                                    </Grid>
-                                                ))}
-                                            </Grid>
-                                        </Box>
-                                    ))}
-                                </Box>
-                            ) : (
-                                <Box 
-                                    sx={{ 
-                                        height: '100%',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: 2,
-                                        p: 4,
-                                        textAlign: 'center'
-                                    }}
-                                >
-                                    <Box
-                                        sx={{
-                                            width: 80,
-                                            height: 80,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            borderRadius: '50%',
-                                            bgcolor: alpha('#fff', 0.08),
-                                            mb: 2
-                                        }}
-                                    >
-                                        <Typography
-                                            sx={{
-                                                fontSize: '2.5rem',
-                                                color: alpha('#fff', 0.5)
-                                            }}
-                                        >
-                                            📺
-                                        </Typography>
-                                    </Box>
-                                    <Typography 
-                                        variant="h6"
-                                        sx={{ 
-                                            color: '#fff',
-                                            fontWeight: 600,
-                                            mb: 1
-                                        }}
-                                    >
-                                        No Streams Found
-                                    </Typography>
-                                    <Typography 
-                                        sx={{ 
-                                            color: alpha('#fff', 0.7),
-                                            fontSize: '1.1rem'
-                                        }}
-                                    >
-                                        No streams available for this content. Make sure you have streaming addons installed.
-                                    </Typography>
-                                </Box>
-                            )}
-                        </Box>
-                    )}
-                </Box>
-            </Container>
-
-            {/* Simple Footer */}
-            <Box
-                sx={{
-                    bgcolor: alpha('#000', 0.3),
-                    py: 3,
-                    borderTop: `1px solid ${alpha('#fff', 0.05)}`,
-                    position: 'relative',
-                    mt: 'auto'
-                }}
-            >
-                <Container maxWidth="xl">
-                    <Typography
-                        sx={{
-                            color: alpha('#fff', 0.6),
-                            textAlign: 'center',
-                            fontSize: '0.9rem'
-                        }}
-                    >
-                        Powered by Stremio • Unofficial Web Player
-                    </Typography>
-                </Container>
-            </Box>
-        </Box>
-    );
+    return renderTabs();
 };
 
 export default MetadataDialog;

@@ -88,6 +88,8 @@ interface LocalStream extends ExternalStream {
         magnetUrl?: string;
         size?: string;
         seeders?: number;
+        isRealDebridCached?: boolean;
+        cached?: boolean;
     };
     subtitles?: Subtitle[];
 }
@@ -631,6 +633,58 @@ const MobileMetadataDialog = () => {
         return detectedFormats;
     };
 
+    const isRealDebridCached = (stream: LocalStream) => {
+        // First check behaviorHints
+        if (stream.behaviorHints?.isRealDebridCached || stream.behaviorHints?.cached) {
+            return true;
+        }
+
+        // Check if stream is from Torrentio and has direct URL
+        const isTorrentioStream = stream.addonId === 'com.stremio.torrentio.addon';
+        const hasDirectUrl = stream.url && (
+            stream.url.startsWith('http') || 
+            stream.url.startsWith('https') ||
+            stream.url.includes('real-debrid.com') ||
+            stream.url.includes('debrid')
+        );
+
+        return isTorrentioStream && hasDirectUrl;
+    };
+
+    const formatTorrentioTitle = (stream: LocalStream) => {
+        const quality = stream.title?.match(/\d{3,4}p|4K|8K/i)?.[0]?.toUpperCase() || '';
+        const isDV = stream.title?.toLowerCase().includes('dv') || stream.title?.toLowerCase().includes('dolby vision');
+        const isHDR = stream.title?.toLowerCase().includes('hdr');
+        
+        let prefix = '[RD+] Torrentio';
+        if (quality.includes('2160') || quality === '4K') {
+            prefix += ' 4k';
+        } else if (quality.includes('1080')) {
+            prefix += ' 1080p';
+        }
+        
+        if (isDV) {
+            prefix += ' DV';
+        }
+        if (isHDR) {
+            prefix += ' | HDR';
+        }
+        
+        return `${prefix} • ${stream.title}`;
+    };
+
+    const formatStreamTitle = (stream: LocalStream) => {
+        if (stream.addonId === 'com.stremio.torrentio.addon') {
+            return formatTorrentioTitle(stream);
+        } else if (stream.addonName?.toLowerCase().includes('mediafusion')) {
+            // For MediaFusion, show both addon info and stream title
+            const addonPart = stream.title?.split('Stream (')?.[0]?.trim() || stream.addonName;
+            const titlePart = stream.name || '';
+            return `${addonPart} • ${titlePart}`;
+        }
+        return stream.title || stream.name || 'Unnamed Stream';
+    };
+
     const renderStreamCard = (stream: LocalStream) => {
         const quality = getStreamQualityInfo(stream);
         const hdrInfo = getHDRInfo(stream);
@@ -643,132 +697,122 @@ const MobileMetadataDialog = () => {
             <Box
                 onClick={() => handleStreamClick(stream)}
                 sx={{
-                    p: 2,
                     mb: 2,
+                    p: 2,
                     borderRadius: 2,
                     bgcolor: alpha('#fff', 0.03),
                     border: `1px solid ${alpha('#fff', 0.1)}`,
                     cursor: 'pointer',
                     transition: 'all 0.2s ease-in-out',
-                    WebkitTapHighlightColor: 'transparent',
-                    '&:active': {
-                        transform: 'scale(0.98)',
-                        bgcolor: alpha('#fff', 0.06)
-                    },
-                    '&:focus': {
-                        outline: 'none'
+                    '&:hover': {
+                        bgcolor: alpha('#fff', 0.06),
+                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                        transform: 'translateY(-2px)'
                     }
                 }}
             >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                    <Box
-                        sx={{
-                            width: 40,
-                            height: 40,
-                            flexShrink: 0,
-                            borderRadius: 2,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            bgcolor: stream.behaviorHints?.isMagnetStream ?
-                                alpha(theme.palette.warning.main, 0.2) :
-                                stream.behaviorHints?.notWebReady ?
-                                    alpha(theme.palette.error.main, 0.2) :
-                                    alpha(theme.palette.primary.main, 0.2),
-                            color: stream.behaviorHints?.isMagnetStream ?
-                                theme.palette.warning.main :
-                                stream.behaviorHints?.notWebReady ?
-                                    theme.palette.error.main :
-                                    theme.palette.primary.main
-                        }}
-                    >
-                        {stream.behaviorHints?.isMagnetStream ? <DownloadIcon /> : 
-                         stream.behaviorHints?.notWebReady ? <DownloadIcon /> : 
-                         <PlayArrowIcon />}
-                    </Box>
-                    <Typography
-                        sx={{
-                            flex: 1,
-                            color: '#fff',
+                <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
+                    <Typography 
+                        variant="h6" 
+                        sx={{ 
                             fontWeight: 600,
-                            fontSize: '0.95rem',
+                            fontSize: '1rem',
+                            mb: 0.5,
+                            color: '#fff',
                             overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
+                            wordBreak: 'break-word',
+                            lineHeight: 1.4,
+                            maxWidth: '100%',
+                            fontFamily: stream.addonId === 'com.stremio.torrentio.addon' ? 'monospace' : 'inherit'
                         }}
                     >
-                        {stream.title || stream.name || 'Unnamed Stream'}
+                        {stream.addonId === 'com.stremio.torrentio.addon' ? stream.name : (stream.title && stream.name ? `${stream.title} • ${stream.name}` : (stream.title || stream.name || 'Unnamed Stream'))}
                     </Typography>
-                </Box>
-
-                <Box sx={{ 
-                    display: 'flex', 
-                    flexWrap: 'wrap', 
-                    gap: 1,
-                    width: '100%'
-                }}>
-                    {quality && (
-                        <Chip
-                            size="small"
-                            icon={<FourKIcon sx={{ fontSize: '1rem' }} />}
-                            label={quality}
-                            sx={{
-                                bgcolor: alpha(theme.palette.primary.main, 0.15),
-                                color: theme.palette.primary.light,
-                                border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
-                                '& .MuiChip-icon': { color: 'inherit' }
-                            }}
-                        />
-                    )}
-                    {hdrInfo && (
-                        <Chip
-                            size="small"
-                            icon={<BrightnessHighIcon sx={{ fontSize: '1rem' }} />}
-                            label={hdrInfo}
-                            sx={{
-                                bgcolor: alpha(theme.palette.secondary.main, 0.15),
-                                color: theme.palette.secondary.light,
-                                border: `1px solid ${alpha(theme.palette.secondary.main, 0.3)}`,
-                                '& .MuiChip-icon': { color: 'inherit' }
-                            }}
-                        />
-                    )}
-                    {audioInfo.map((format, index) => (
-                        <Chip
-                            key={`audio-format-${format}-${index}`}
-                            size="small"
-                            icon={<SurroundSoundIcon sx={{ fontSize: '1rem' }} />}
-                            label={format}
-                            sx={{
-                                bgcolor: alpha(theme.palette.warning.main, 0.15),
-                                color: theme.palette.warning.light,
-                                border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`,
-                                '& .MuiChip-icon': { color: 'inherit' }
-                            }}
-                        />
-                    ))}
-                    {size && (
-                        <Chip
-                            size="small"
-                            label={size}
-                            sx={{
-                                bgcolor: alpha('#fff', 0.1),
-                                color: alpha('#fff', 0.9),
-                                border: `1px solid ${alpha('#fff', 0.2)}`
-                            }}
-                        />
-                    )}
-                    {seeders && (
-                        <Chip
-                            size="small"
-                            label={`${seeders} seeders`}
-                            sx={{
-                                bgcolor: alpha(theme.palette.success.main, 0.15),
-                                color: theme.palette.success.light,
-                                border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`
-                            }}
-                        />
-                    )}
+                    
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 0.5 }}>
+                        {isRealDebridCached(stream) && (
+                            <Box
+                                sx={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    px: 1,
+                                    py: 0.5,
+                                    borderRadius: 1,
+                                    fontSize: '0.8rem',
+                                    fontWeight: 700,
+                                    bgcolor: alpha('#1b5e20', 0.4),
+                                    color: '#66bb6a',
+                                    border: '1px solid rgba(102, 187, 106, 0.5)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px'
+                                }}
+                            >
+                                RD+
+                            </Box>
+                        )}
+                        {quality && (
+                            <Chip
+                                size="small"
+                                icon={<FourKIcon sx={{ fontSize: '1rem' }} />}
+                                label={quality}
+                                sx={{
+                                    bgcolor: alpha(theme.palette.primary.main, 0.15),
+                                    color: theme.palette.primary.light,
+                                    border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
+                                    '& .MuiChip-icon': { color: 'inherit' }
+                                }}
+                            />
+                        )}
+                        {hdrInfo && (
+                            <Chip
+                                size="small"
+                                icon={<BrightnessHighIcon sx={{ fontSize: '1rem' }} />}
+                                label={hdrInfo}
+                                sx={{
+                                    bgcolor: alpha(theme.palette.secondary.main, 0.15),
+                                    color: theme.palette.secondary.light,
+                                    border: `1px solid ${alpha(theme.palette.secondary.main, 0.3)}`,
+                                    '& .MuiChip-icon': { color: 'inherit' }
+                                }}
+                            />
+                        )}
+                        {audioInfo.map((format, index) => (
+                            <Chip
+                                key={`audio-format-${format}-${index}`}
+                                size="small"
+                                icon={<SurroundSoundIcon sx={{ fontSize: '1rem' }} />}
+                                label={format}
+                                sx={{
+                                    bgcolor: alpha(theme.palette.warning.main, 0.15),
+                                    color: theme.palette.warning.light,
+                                    border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`,
+                                    '& .MuiChip-icon': { color: 'inherit' }
+                                }}
+                            />
+                        ))}
+                        {size && (
+                            <Chip
+                                size="small"
+                                label={size}
+                                sx={{
+                                    bgcolor: alpha('#fff', 0.1),
+                                    color: alpha('#fff', 0.9),
+                                    border: `1px solid ${alpha('#fff', 0.2)}`
+                                }}
+                            />
+                        )}
+                        {seeders && (
+                            <Chip
+                                size="small"
+                                label={`${seeders} seeders`}
+                                sx={{
+                                    bgcolor: alpha(theme.palette.success.main, 0.15),
+                                    color: theme.palette.success.light,
+                                    border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`
+                                }}
+                            />
+                        )}
+                    </Box>
                 </Box>
             </Box>
         );
@@ -1333,16 +1377,17 @@ const MobileMetadataDialog = () => {
         // Get unique addon IDs from grouped streams
         const availableAddons = Object.keys(groupedStreams);
         
-        // Create source options based on available streams and installed addons
-        const sources = ['all', ...availableAddons].filter(source => 
-            source === 'all' || 
-            installedAddons.hasOwnProperty(source) || 
-            ['vidsrc', 'railway'].includes(source)
-        );
+        // Create source options - always include 'all' and ANY addon that has streams
+        // No more filtering based on installed addons or hardcoded sources
+        const sources = ['all', ...availableAddons];
 
         const getSourceDisplayName = (source: string) => {
             if (source === 'all') return 'All Sources';
+            // If it's in installedAddons, use that name
             if (installedAddons.hasOwnProperty(source)) return installedAddons[source];
+            // Otherwise, use the name from the grouped streams if available
+            if (groupedStreams[source]) return groupedStreams[source].addonName;
+            // Fallback to capitalized source ID
             return source.charAt(0).toUpperCase() + source.slice(1);
         };
 
@@ -1361,8 +1406,8 @@ const MobileMetadataDialog = () => {
                     sx={{
                         position: 'sticky',
                         top: 0,
-                        bgcolor: alpha(theme.palette.background.paper, 0.98),
-                        backdropFilter: 'blur(10px)',
+                        bgcolor: alpha(theme.palette.background.paper, 0.96),
+                        backdropFilter: 'blur(16px)',
                         zIndex: 2,
                         borderBottom: `1px solid ${alpha('#fff', 0.1)}`
                     }}
@@ -1372,7 +1417,7 @@ const MobileMetadataDialog = () => {
                             sx={{
                                 position: 'relative',
                                 width: '100%',
-                                height: '25vh',
+                                height: '30vh',
                                 overflow: 'hidden'
                             }}
                         >
@@ -1394,7 +1439,7 @@ const MobileMetadataDialog = () => {
                                         left: 0,
                                         right: 0,
                                         bottom: 0,
-                                        background: 'linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.8) 70%, rgba(0,0,0,0.95) 100%)'
+                                        background: 'linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 70%, rgba(0,0,0,0.95) 100%)'
                                     }
                                 }}
                             />
@@ -1404,7 +1449,7 @@ const MobileMetadataDialog = () => {
                                     bottom: 0,
                                     left: 0,
                                     right: 0,
-                                    p: 2,
+                                    p: 3,
                                     display: 'flex',
                                     flexDirection: 'column',
                                     gap: 1
@@ -1414,9 +1459,9 @@ const MobileMetadataDialog = () => {
                                     variant="h6"
                                     sx={{
                                         color: '#fff',
-                                        fontSize: '1.1rem',
-                                        fontWeight: 600,
-                                        textShadow: '0 2px 4px rgba(0,0,0,0.4)'
+                                        fontSize: '1.3rem',
+                                        fontWeight: 700,
+                                        textShadow: '0 2px 4px rgba(0,0,0,0.5)'
                                     }}
                                 >
                                     {metadata.episodeInfo.title || `Episode ${metadata.episodeInfo.number}`}
@@ -1425,13 +1470,13 @@ const MobileMetadataDialog = () => {
                                     <Typography
                                         variant="body2"
                                         sx={{
-                                            color: alpha('#fff', 0.9),
-                                            fontSize: '0.85rem',
+                                            color: alpha('#fff', 0.95),
+                                            fontSize: '0.9rem',
                                             display: '-webkit-box',
                                             WebkitLineClamp: 2,
                                             WebkitBoxOrient: 'vertical',
                                             overflow: 'hidden',
-                                            textShadow: '0 1px 2px rgba(0,0,0,0.4)'
+                                            textShadow: '0 1px 2px rgba(0,0,0,0.5)'
                                         }}
                                     >
                                         {metadata.episodeInfo.description}
@@ -1441,10 +1486,16 @@ const MobileMetadataDialog = () => {
                         </Box>
                     )}
 
-                    <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                         <IconButton
                             onClick={() => setShowStreamsPage(false)}
-                            sx={{ color: 'white' }}
+                            sx={{ 
+                                color: 'white',
+                                bgcolor: alpha(theme.palette.primary.main, 0.15),
+                                '&:hover': {
+                                    bgcolor: alpha(theme.palette.primary.main, 0.25),
+                                }
+                            }}
                         >
                             <ArrowBackIcon />
                         </IconButton>
@@ -1453,8 +1504,8 @@ const MobileMetadataDialog = () => {
                                 variant="subtitle1"
                                 sx={{
                                     color: '#fff',
-                                    fontSize: '0.9rem',
-                                    fontWeight: 600,
+                                    fontSize: '1rem',
+                                    fontWeight: 700,
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis',
                                     whiteSpace: 'nowrap'
@@ -1466,8 +1517,8 @@ const MobileMetadataDialog = () => {
                                 <Typography
                                     variant="caption"
                                     sx={{
-                                        color: alpha('#fff', 0.7),
-                                        fontSize: '0.75rem'
+                                        color: alpha('#fff', 0.8),
+                                        fontSize: '0.8rem'
                                     }}
                                 >
                                     Season {selectedSeason}, Episode {metadata.episodeInfo.number}
@@ -1480,8 +1531,9 @@ const MobileMetadataDialog = () => {
                         sx={{
                             display: 'flex',
                             gap: 1,
-                            p: 1.5,
-                            pt: 0,
+                            p: 2,
+                            pt: 0.5,
+                            pb: 2,
                             overflowX: 'auto',
                             WebkitOverflowScrolling: 'touch',
                             msOverflowStyle: 'none',
@@ -1498,9 +1550,9 @@ const MobileMetadataDialog = () => {
                                 sx={{
                                     minWidth: 'unset',
                                     px: 2,
-                                    py: 0.5,
-                                    fontSize: '0.8rem',
-                                    borderRadius: 1,
+                                    py: 0.75,
+                                    fontSize: '0.85rem',
+                                    borderRadius: 6,
                                     whiteSpace: 'nowrap',
                                     textTransform: 'capitalize',
                                     color: selectedSource === source ? '#000' : '#fff',
@@ -1522,8 +1574,8 @@ const MobileMetadataDialog = () => {
                         flex: 1,
                         overflowY: 'auto',
                         overflowX: 'hidden',
-                        p: 2,
-                        pb: 4,
+                        p: 2.5,
+                        pb: 8,
                         WebkitOverflowScrolling: 'touch',
                         msOverflowStyle: 'none',
                         scrollbarWidth: 'none',
@@ -1533,51 +1585,87 @@ const MobileMetadataDialog = () => {
                     {loadingStreams ? (
                         <Box sx={{ 
                             display: 'flex', 
+                            flexDirection: 'column',
                             justifyContent: 'center', 
                             alignItems: 'center',
-                            minHeight: '200px'
+                            minHeight: '200px',
+                            gap: 2
                         }}>
-                            <CircularProgress size={32} />
+                            <CircularProgress size={40} />
+                            <Typography
+                                variant="body2"
+                                sx={{
+                                    color: alpha('#fff', 0.8),
+                                    textAlign: 'center'
+                                }}
+                            >
+                                Looking for streams...
+                            </Typography>
                         </Box>
                     ) : Object.keys(groupedStreams).length === 0 ? (
                         <Box sx={{ 
                             display: 'flex', 
+                            flexDirection: 'column',
                             justifyContent: 'center', 
                             alignItems: 'center',
-                            minHeight: '200px'
+                            minHeight: '200px',
+                            gap: 2
                         }}>
+                            <Box sx={{
+                                width: 80,
+                                height: 80,
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                bgcolor: alpha('#fff', 0.05),
+                                color: alpha('#fff', 0.7)
+                            }}>
+                                <InfoIcon sx={{ fontSize: 40 }} />
+                            </Box>
+                            <Typography
+                                variant="body1"
+                                sx={{
+                                    color: alpha('#fff', 0.9),
+                                    textAlign: 'center',
+                                    fontWeight: 600
+                                }}
+                            >
+                                No streams available
+                            </Typography>
                             <Typography
                                 variant="body2"
                                 sx={{
                                     color: alpha('#fff', 0.7),
-                                    textAlign: 'center'
+                                    textAlign: 'center',
+                                    maxWidth: '80%'
                                 }}
                             >
-                                No streams available
+                                Try changing the source or check back later
                             </Typography>
                         </Box>
                     ) : (
                         Object.entries(groupedStreams)
                             .filter(([addonId]) => selectedSource === 'all' || addonId === selectedSource)
                             .map(([addonId, { addonName, streams }]) => (
-                                <Box key={addonId} sx={{ mb: 3, width: '100%' }}>
+                                <Box key={addonId} sx={{ mb: 4, width: '100%' }}>
                                     <Typography
                                         variant="subtitle2"
                                         sx={{
-                                            color: alpha('#fff', 0.7),
-                                            fontSize: '0.8rem',
-                                            fontWeight: 600,
-                                            mb: 1.5,
+                                            color: alpha('#fff', 0.8),
+                                            fontSize: '0.9rem',
+                                            fontWeight: 700,
+                                            mb: 2,
                                             display: 'flex',
                                             alignItems: 'center',
-                                            gap: 1
+                                            gap: 1.5
                                         }}
                                     >
                                         <Box
                                             sx={{
-                                                width: 3,
-                                                height: 16,
-                                                borderRadius: 1,
+                                                width: 4,
+                                                height: 18,
+                                                borderRadius: 2,
                                                 bgcolor: theme.palette.primary.main
                                             }}
                                         />
@@ -1586,7 +1674,7 @@ const MobileMetadataDialog = () => {
                                     <Box sx={{ 
                                         display: 'flex', 
                                         flexDirection: 'column', 
-                                        gap: 1.5,
+                                        gap: 2,
                                         width: '100%'
                                     }}>
                                         {streams.map((stream) => renderStreamCard(stream))}
@@ -1696,9 +1784,9 @@ const MobileMetadataDialog = () => {
                         left: 0,
                         right: 0,
                         bottom: 0,
-                        background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.98) 100%)',
+                        background: 'linear-gradient(135deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.97) 100%)',
                         transform: `translateX(${showStreamsPage ? '0%' : '100%'})`,
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
                         zIndex: 1,
                         overflowY: 'auto',
                         WebkitOverflowScrolling: 'touch',
@@ -1710,10 +1798,9 @@ const MobileMetadataDialog = () => {
                     {renderStreams()}
                 </Box>
 
-                {/* Back Button */}
-                <Slide appear={false} direction="down" in={showNavigation}>
+                {/* Back Button - Only show when streams page is NOT visible */}
+                <Slide appear={false} direction="down" in={showNavigation && !showStreamsPage}>
                     <IconButton
-                        color="inherit"
                         onClick={handleBack}
                         sx={{
                             position: 'fixed',
@@ -1722,8 +1809,11 @@ const MobileMetadataDialog = () => {
                             zIndex: 1200,
                             padding: '8px',
                             color: '#fff',
+                            bgcolor: alpha('#000', 0.5),
+                            backdropFilter: 'blur(4px)',
                             '&:hover': {
-                                color: theme.palette.primary.main
+                                color: theme.palette.primary.main,
+                                bgcolor: alpha('#000', 0.7)
                             }
                         }}
                     >

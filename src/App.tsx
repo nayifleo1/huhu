@@ -1,9 +1,10 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
-import { ThemeProvider, Box, GlobalStyles } from '@mui/material';
+import { ThemeProvider, Box, GlobalStyles, useTheme, useMediaQuery } from '@mui/material';
 import CssBaseline from '@mui/material/CssBaseline';
 import CatalogWrapper from './pages/CatalogWrapper';
 import Player from './pages/Player';
 import Navbar from './components/Navbar';
+import MobileNavbar from './components/MobileNavbar';
 import MobileBottomNav from './components/MobileBottomNav';
 import AddonsManager from './components/AddonsManager';
 import ResponsiveMetadataDialog from './components/ResponsiveMetadataDialog';
@@ -42,6 +43,8 @@ const globalStyles = {
 // Wrapper component to handle conditional rendering of MobileBottomNav
 const AppContent = () => {
   const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const hideBottomNav = location.pathname.includes('/title/');
 
   return (
@@ -60,7 +63,7 @@ const AppContent = () => {
           flexDirection: 'column'
         }}
       >
-        <Navbar />
+        {isMobile ? <MobileNavbar /> : <Navbar />}
         <Box
           component="main"
           sx={{
@@ -83,7 +86,7 @@ const AppContent = () => {
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </Box>
-        {!hideBottomNav && <MobileBottomNav />}
+        {isMobile && !hideBottomNav && <MobileBottomNav />}
       </Box>
     </ScrollHideProvider>
   );

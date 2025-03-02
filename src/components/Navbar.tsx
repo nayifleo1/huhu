@@ -15,12 +15,10 @@ import {
     Menu,
     MenuItem,
     Badge,
-    Slide,
-    alpha,
     Paper,
     InputBase,
     useTheme,
-    useMediaQuery,
+    alpha,
     ClickAwayListener
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
@@ -34,25 +32,9 @@ import { catalogService } from '../services/catalogService';
 import { StreamingContent } from '../types/catalog';
 import SearchDropdown from './SearchDropdown';
 import { useDebounce } from '../hooks/useDebounce';
-import { useScrollHide } from '../contexts/ScrollHideContext';
-
-interface HideOnScrollProps {
-    children: React.ReactElement;
-}
-
-function HideOnScroll({ children }: HideOnScrollProps) {
-    const { showNavigation } = useScrollHide();
-
-    return (
-        <Slide appear={false} direction="down" in={showNavigation}>
-            {children}
-        </Slide>
-    );
-}
 
 const Navbar = () => {
     const theme = useTheme();
-    const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const navigate = useNavigate();
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [addAddonUrl, setAddAddonUrl] = useState('');
@@ -65,48 +47,6 @@ const Navbar = () => {
     const searchInputRef = useRef<HTMLFormElement>(null);
     const stremioService = StremioService.getInstance();
     const debouncedSearchQuery = useDebounce(searchQuery, 300);
-
-    if (isMobile) {
-        return (
-            <>
-                <HideOnScroll>
-                    <AppBar 
-                        position="fixed" 
-                        elevation={0}
-                        sx={{ 
-                            background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.85) 100%)',
-                            backdropFilter: 'blur(20px)',
-                            borderBottom: '1px solid rgba(20, 184, 166, 0.1)'
-                        }}
-                    >
-                        <Toolbar sx={{ 
-                            justifyContent: 'center',
-                            minHeight: '72px',
-                            paddingTop: '16px',
-                            paddingBottom: '8px'
-                        }}>
-                            <Typography 
-                                variant="h4" 
-                                sx={{ 
-                                    fontFamily: "'Comic Sans MS', cursive",
-                                    fontWeight: 'bold',
-                                    background: 'linear-gradient(45deg, #2dd4bf, #14b8a6)',
-                                    WebkitBackgroundClip: 'text',
-                                    WebkitTextFillColor: 'transparent',
-                                    letterSpacing: '2px',
-                                    transform: 'rotate(-2deg)',
-                                    textShadow: '2px 2px 4px rgba(0,0,0,0.2)'
-                                }}
-                            >
-                                HuHu
-                            </Typography>
-                        </Toolbar>
-                    </AppBar>
-                </HideOnScroll>
-                <Box sx={{ height: '88px' }} />
-            </>
-        );
-    }
 
     const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
         setAnchorEl(event.currentTarget);
@@ -203,121 +143,103 @@ const Navbar = () => {
 
     return (
         <>
-            <HideOnScroll>
-                <AppBar 
-                    position="fixed" 
-                    elevation={0}
-                    sx={{ 
-                        background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.85) 100%)',
-                        backdropFilter: 'blur(20px)',
-                        borderBottom: '1px solid rgba(20, 184, 166, 0.1)'
-                    }}
-                >
-                    <Toolbar sx={{ gap: 2, justifyContent: 'space-between' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Box 
-                                    sx={{ 
-                                        width: 40, 
-                                        height: 40, 
-                                        borderRadius: '12px',
-                                        background: 'linear-gradient(45deg, #14b8a6, #0d9488)',
+            <AppBar 
+                position="fixed" 
+                elevation={0}
+                sx={{ 
+                    background: 'linear-gradient(180deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.85) 100%)',
+                    backdropFilter: 'blur(20px)',
+                    borderBottom: '1px solid rgba(20, 184, 166, 0.1)'
+                }}
+            >
+                <Toolbar sx={{ gap: 2, justifyContent: 'space-between' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box 
+                                sx={{ 
+                                    width: 40, 
+                                    height: 40, 
+                                    borderRadius: '12px',
+                                    background: 'linear-gradient(45deg, #14b8a6, #0d9488)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    boxShadow: '0 4px 12px rgba(20, 184, 166, 0.3)'
+                                }}
+                            >
+                                <ExtensionIcon sx={{ color: 'white' }} />
+                            </Box>
+                            <Typography 
+                                variant="h6" 
+                                sx={{ 
+                                    fontWeight: 600,
+                                    background: 'linear-gradient(45deg, #2dd4bf, #14b8a6)',
+                                    WebkitBackgroundClip: 'text',
+                                    WebkitTextFillColor: 'transparent',
+                                    letterSpacing: '0.5px'
+                                }}
+                            >
+                                Stremio Web
+                            </Typography>
+                        </Link>
+
+                        <ClickAwayListener onClickAway={() => setShowDropdown(false)}>
+                            <Box sx={{ position: 'relative' }}>
+                                <Paper
+                                    ref={searchInputRef}
+                                    component="form"
+                                    sx={{
+                                        p: '2px 4px',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        justifyContent: 'center',
-                                        boxShadow: '0 4px 12px rgba(20, 184, 166, 0.3)'
-                                    }}
-                                >
-                                    <ExtensionIcon sx={{ color: 'white' }} />
-                                </Box>
-                                <Typography 
-                                    variant="h6" 
-                                    sx={{ 
-                                        fontWeight: 600,
-                                        background: 'linear-gradient(45deg, #2dd4bf, #14b8a6)',
-                                        WebkitBackgroundClip: 'text',
-                                        WebkitTextFillColor: 'transparent',
-                                        letterSpacing: '0.5px'
-                                    }}
-                                >
-                                    Stremio Web
-                                </Typography>
-                            </Link>
-
-                            <ClickAwayListener onClickAway={() => setShowDropdown(false)}>
-                                <Box sx={{ position: 'relative' }}>
-                                    <Paper
-                                        ref={searchInputRef}
-                                        component="form"
-                                        sx={{
-                                            p: '2px 4px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            width: 400,
-                                            borderRadius: 2,
-                                            background: alpha(theme.palette.background.paper, 0.4),
-                                            backdropFilter: 'blur(10px)',
-                                            border: '1px solid rgba(255,255,255,0.1)',
-                                            transition: 'all 0.3s ease',
-                                            '&:hover': {
-                                                background: alpha(theme.palette.background.paper, 0.6),
-                                                border: '1px solid rgba(255,255,255,0.2)',
-                                            }
-                                        }}
-                                    >
-                                        <InputBase
-                                            sx={{ ml: 1, flex: 1, color: 'white' }}
-                                            placeholder="Search movies & TV shows..."
-                                            value={searchQuery}
-                                            onChange={handleSearchChange}
-                                            onFocus={handleSearchFocus}
-                                        />
-                                        <IconButton sx={{ p: '10px', color: alpha('#fff', 0.7) }}>
-                                            <SearchIcon />
-                                        </IconButton>
-                                    </Paper>
-                                    {showDropdown && (
-                                        <SearchDropdown
-                                            loading={loading}
-                                            results={searchResults}
-                                            onItemClick={handleContentClick}
-                                            anchorEl={searchInputRef.current}
-                                        />
-                                    )}
-                                </Box>
-                            </ClickAwayListener>
-                        </Box>
-
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Tooltip title="Installed Addons">
-                                <Badge 
-                                    badgeContent={installedAddons} 
-                                    color="primary"
-                                    sx={{ 
-                                        '& .MuiBadge-badge': {
-                                            background: 'linear-gradient(45deg, #14b8a6, #0d9488)',
-                                            border: '2px solid #020617'
+                                        width: 400,
+                                        borderRadius: 2,
+                                        background: alpha(theme.palette.background.paper, 0.4),
+                                        backdropFilter: 'blur(10px)',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        transition: 'all 0.3s ease',
+                                        '&:hover': {
+                                            background: alpha(theme.palette.background.paper, 0.6),
+                                            border: '1px solid rgba(255,255,255,0.2)',
                                         }
                                     }}
                                 >
-                                    <IconButton 
-                                        sx={{ 
-                                            color: alpha('#fff', 0.7),
-                                            transition: 'all 0.2s ease',
-                                            '&:hover': { 
-                                                color: '#fff',
-                                                transform: 'scale(1.1)'
-                                            }
-                                        }}
-                                    >
-                                        <ExtensionIcon />
+                                    <InputBase
+                                        sx={{ ml: 1, flex: 1, color: 'white' }}
+                                        placeholder="Search movies & TV shows..."
+                                        value={searchQuery}
+                                        onChange={handleSearchChange}
+                                        onFocus={handleSearchFocus}
+                                    />
+                                    <IconButton sx={{ p: '10px', color: alpha('#fff', 0.7) }}>
+                                        <SearchIcon />
                                     </IconButton>
-                                </Badge>
-                            </Tooltip>
+                                </Paper>
+                                {showDropdown && (
+                                    <SearchDropdown
+                                        loading={loading}
+                                        results={searchResults}
+                                        onItemClick={handleContentClick}
+                                        anchorEl={searchInputRef.current}
+                                    />
+                                )}
+                            </Box>
+                        </ClickAwayListener>
+                    </Box>
 
-                            <Tooltip title="Add Addon">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Tooltip title="Installed Addons">
+                            <Badge 
+                                badgeContent={installedAddons} 
+                                color="primary"
+                                sx={{ 
+                                    '& .MuiBadge-badge': {
+                                        background: 'linear-gradient(45deg, #14b8a6, #0d9488)',
+                                        border: '2px solid #020617'
+                                    }
+                                }}
+                            >
                                 <IconButton 
-                                    onClick={() => setAddAddonDialogOpen(true)}
                                     sx={{ 
                                         color: alpha('#fff', 0.7),
                                         transition: 'all 0.2s ease',
@@ -327,29 +249,45 @@ const Navbar = () => {
                                         }
                                     }}
                                 >
-                                    <AddIcon />
+                                    <ExtensionIcon />
                                 </IconButton>
-                            </Tooltip>
+                            </Badge>
+                        </Tooltip>
 
-                            <Tooltip title="Settings">
-                                <IconButton 
-                                    onClick={handleMenuOpen}
-                                    sx={{ 
-                                        color: alpha('#fff', 0.7),
-                                        transition: 'all 0.2s ease',
-                                        '&:hover': { 
-                                            color: '#fff',
-                                            transform: 'scale(1.1)'
-                                        }
-                                    }}
-                                >
-                                    <AccountCircleIcon />
-                                </IconButton>
-                            </Tooltip>
-                        </Box>
-                    </Toolbar>
-                </AppBar>
-            </HideOnScroll>
+                        <Tooltip title="Add Addon">
+                            <IconButton 
+                                onClick={() => setAddAddonDialogOpen(true)}
+                                sx={{ 
+                                    color: alpha('#fff', 0.7),
+                                    transition: 'all 0.2s ease',
+                                    '&:hover': { 
+                                        color: '#fff',
+                                        transform: 'scale(1.1)'
+                                    }
+                                }}
+                            >
+                                <AddIcon />
+                            </IconButton>
+                        </Tooltip>
+
+                        <Tooltip title="Settings">
+                            <IconButton 
+                                onClick={handleMenuOpen}
+                                sx={{ 
+                                    color: alpha('#fff', 0.7),
+                                    transition: 'all 0.2s ease',
+                                    '&:hover': { 
+                                        color: '#fff',
+                                        transform: 'scale(1.1)'
+                                    }
+                                }}
+                            >
+                                <AccountCircleIcon />
+                            </IconButton>
+                        </Tooltip>
+                    </Box>
+                </Toolbar>
+            </AppBar>
             <Toolbar /> {/* Spacer for fixed AppBar */}
 
             {/* Settings Menu */}

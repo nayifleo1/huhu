@@ -45,6 +45,8 @@ export interface Stream {
     bingeGroup?: string;
     notWebReady?: boolean;
     proxyHeaders?: Record<string, string>;
+    isRealDebridCached?: boolean;
+    cached?: boolean;
   };
   description?: string;
   subtitles?: Subtitle[];
